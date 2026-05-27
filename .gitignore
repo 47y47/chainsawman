@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+out/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.local
+*.pem
+credentials.json
+
+# Dev logs (daily work journals, not code)
+dev-logs/
+
+# Electron builder cache in project
+build/
+
+# Temp
+*.log
+*.tmp

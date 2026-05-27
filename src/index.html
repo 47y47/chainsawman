@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>电锯人待办</title>
+  <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 自定义标题栏 -->
+    <header class="header">
+      <div class="header__titlebar">
+        <div class="header__titlebar-drag">
+          <span class="header__title">电锯人待办</span>
+        </div>
+        <div class="header__titlebar-controls">
+          <button id="btn-minimize" class="header__win-btn header__win-btn--minimize" title="最小化">
+            <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="5.5" width="10" height="1.5" fill="currentColor"/></svg>
+          </button>
+          <button id="btn-close" class="header__win-btn header__win-btn--close" title="关闭（最小化到托盘）">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1,1 L11,11 M11,1 L1,11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="header__week-nav">
+        <button id="btn-prev-week" class="header__nav-btn">&lt;</button>
+        <span id="week-label" class="header__week-label">--</span>
+        <button id="btn-next-week" class="header__nav-btn">&gt;</button>
+        <button id="btn-today" class="header__today-btn">本周</button>
+        <button id="btn-summary" class="header__summary-btn" title="每周战绩">统计</button>
+        <button id="btn-settings" class="header__summary-btn" title="设置">⚙</button>
+      </div>
+    </header>
+
+    <!-- 待办列表 -->
+    <main class="todo-list" id="todo-list">
+      <!-- 动态渲染 -->
+    </main>
+
+    <!-- 底部添加按钮 -->
+    <footer class="footer">
+      <button id="btn-add" class="footer__add-btn">+ 订立契约</button>
+    </footer>
+  </div>
+
+  <!-- 添加/编辑弹窗 -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <h3 class="modal__title" id="modal-title">新契约</h3>
+      <input type="text" id="modal-input" class="modal__input" placeholder="契约内容…" maxlength="200">
+      <div class="modal__row">
+        <label class="modal__label">契约性质</label>
+        <select id="modal-type" class="modal__select">
+          <option value="normal">一般任务</option>
+          <option value="daily">每日契约</option>
+          <option value="weekly">每周讨伐</option>
+        </select>
+      </div>
+      <div class="modal__row">
+        <label class="modal__label">讨伐时刻</label>
+        <input type="time" id="modal-remind" class="modal__time">
+      </div>
+      <div class="modal__actions">
+        <button id="btn-modal-cancel" class="modal__btn modal__btn--cancel">取消</button>
+        <button id="btn-modal-confirm" class="modal__btn modal__btn--confirm">契约成立</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 评分弹窗 -->
+  <div id="scoring-overlay" class="modal-overlay hidden">
+    <div class="modal modal--scoring">
+      <h3 class="modal__title">讨伐评定</h3>
+      <div id="scoring-boxes" class="scoring__boxes">
+        <!-- 11 个雏菊方格动态生成 -->
+      </div>
+      <button id="btn-scoring-confirm" class="modal__btn modal__btn--confirm">确认</button>
+    </div>
+  </div>
+
+  <!-- 总结弹窗 -->
+  <div id="summary-overlay" class="modal-overlay hidden">
+    <div class="modal modal--summary">
+      <h3 class="modal__title">本周战绩</h3>
+      <div id="summary-content">
+        <!-- 动态填充 -->
+      </div>
+      <button id="btn-summary-close" class="modal__btn modal__btn--cancel">关闭</button>
+    </div>
+  </div>
+
+  <!-- 设置弹窗 -->
+  <div id="settings-overlay" class="modal-overlay hidden">
+    <div class="modal modal--settings">
+      <h3 class="modal__title">设置</h3>
+      <div class="settings__item">
+        <span class="settings__label">静音</span>
+        <button id="btn-mute-toggle" class="settings__toggle" data-key="muted">关</button>
+      </div>
+      <div class="settings__item">
+        <span class="settings__label">开机自启</span>
+        <button id="btn-autostart-toggle" class="settings__toggle">关</button>
+      </div>
+      <button id="btn-settings-close" class="modal__btn modal__btn--cancel">关闭</button>
+    </div>
+  </div>
+
+  <!-- 右键菜单 -->
+  <div id="context-menu" class="context-menu hidden">
+    <button class="context-menu__item" data-action="edit">修改</button>
+    <button class="context-menu__item context-menu__item--danger" data-action="delete">废除</button>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
