@@ -286,6 +286,11 @@ function setupIPC() {
       } else {
         await autoLauncher.disable();
       }
+      db.run(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('auto_start', ?)",
+        [enabled ? 'true' : 'false']
+      );
+      saveDB();
       return true;
     } catch (e) {
       return false;
@@ -302,13 +307,22 @@ function setupIPC() {
 // ─── Auto Launch ────────────────────────────────────
 let autoLauncher = null;
 
-function setupAutoLaunch() {
+async function setupAutoLaunch() {
   autoLauncher = new AutoLaunch({ name: '电锯人待办' });
-  autoLauncher.isEnabled().then((enabled) => {
-    if (!enabled) {
-      autoLauncher.enable().catch(() => {});
+  try {
+    const row = queryOne("SELECT value FROM settings WHERE key = 'auto_start'");
+    const shouldEnable = row ? row.value === 'true' : true;
+    const currentlyEnabled = await autoLauncher.isEnabled();
+
+    if (shouldEnable && !currentlyEnabled) {
+      await autoLauncher.enable();
+    } else if (!shouldEnable && currentlyEnabled) {
+      await autoLauncher.disable();
     }
-  });
+  } catch (e) {
+    // Fallback: enable by default
+    autoLauncher.enable().catch(() => {});
+  }
 }
 
 // ─── Reminder Timer ─────────────────────────────────

@@ -66,7 +66,7 @@ function formatWeek(year, week) {
   sunday.setUTCDate(monday.getUTCDate() + 6);
 
   const fmt = (d) => `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
-  return `${year}年 第${week}周 (${fmt(monday)}-${fmt(sunday)})`;
+  return `${year}年 ${fmt(monday)} - ${fmt(sunday)}`;
 }
 
 // ─── Navigation ────────────────────────────────
@@ -125,7 +125,11 @@ function renderTodos() {
            data-id="${todo.id}"
            title="${todo.status === 'completed' ? '已讨伐' : '下拉讨伐'}">
         <div class="todo-item__handle">
-          <div class="todo-item__handle-inner"></div>
+          <svg viewBox="0 0 28 28" width="26" height="26" class="todo-item__handle-svg">
+            <polygon points="14,3 3,23 25,23" fill="none" stroke="#c49550" stroke-width="2.5" stroke-linejoin="round"/>
+            <polygon points="14,7 7,21 21,21" fill="none" stroke="#a07040" stroke-width="1.2" stroke-linejoin="round" opacity="0.6"/>
+            <circle cx="14" cy="23" r="2.2" fill="#8b6914"/>
+          </svg>
         </div>
       </div>
       <span class="todo-item__text">
@@ -177,10 +181,11 @@ function renderScratch() {
 
 // ─── Pull Cord Interaction ─────────────────────
 function attachPullCord(assembly) {
-  let startY = 0;
-  let dragged = 0;
+  let startX = 0, startY = 0;
+  let dragX = 0, dragY = 0;
   let isDragging = false;
   const THRESHOLD = 100;
+  const MAX_DIST = 150;
   const handle = assembly.querySelector('.todo-item__handle');
   let cableSvg = null;
 
@@ -188,7 +193,7 @@ function attachPullCord(assembly) {
     if (cableSvg) return;
     cableSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     cableSvg.setAttribute('class', 'todo-item__cable');
-    cableSvg.style.cssText = 'position:absolute;top:0;left:0;width:40px;height:100%;pointer-events:none;overflow:visible;z-index:1;';
+    cableSvg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:1;';
 
     const ns = 'http://www.w3.org/2000/svg';
     const defs = document.createElementNS(ns, 'defs');
@@ -224,19 +229,22 @@ function attachPullCord(assembly) {
     assembly.insertBefore(cableSvg, handle);
   }
 
-  function updateCable(dy) {
+  function updateCable(dx, dy) {
     if (!cableSvg) return;
-    const tension = Math.min(dy / THRESHOLD, 1);
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const tension = Math.min(dist / THRESHOLD, 1);
+
     const grad = cableSvg.querySelector('linearGradient');
     const stops = grad.querySelectorAll('stop');
     const r = Math.round(74 + tension * (196 - 74));
     const g = Math.round(74 + tension * (30 - 74));
     const b = Math.round(74 + tension * (58 - 74));
+    stops[0].setAttribute('stop-color', `rgb(${r},${g},${b})`);
     stops[1].setAttribute('stop-color', `rgb(${r},${g},${b})`);
 
     const ax = 20, ay = 4;
-    const hx = 20, hy = 4 + dy;
-    const cx = ax, cy = 4 + dy * 0.6;
+    const hx = 20 + dx, hy = 4 + dy;
+    const cx = 20 + dx * 0.55, cy = 4 + dy * 0.55;
     const d = `M${ax},${ay} Q${cx},${cy} ${hx},${hy}`;
     cableSvg.querySelector('.todo-item__cable-path').setAttribute('d', d);
     cableSvg.querySelector('.todo-item__cable-shadow').setAttribute('d', d);
@@ -255,25 +263,35 @@ function attachPullCord(assembly) {
 
   assembly.addEventListener('mousedown', (e) => {
     isDragging = true;
+    startX = e.clientX;
     startY = e.clientY;
-    dragged = 0;
+    dragX = 0; dragY = 0;
     handle.style.transition = 'none';
     handle.style.transform = '';
+    handle.style.transformOrigin = 'top center';
     createCable();
-    updateCable(0);
+    updateCable(0, 0);
     document.body.classList.add('shaking');
     e.preventDefault();
   });
 
   const onMove = (e) => {
     if (!isDragging) return;
-    dragged = e.clientY - startY;
-    const dy = Math.max(0, dragged);
-    handle.style.transform = `translateY(${dy}px) rotate(${dy * 0.12}deg)`;
-    handle.style.transformOrigin = 'top center';
-    updateCable(dy);
+    let dx = e.clientX - startX;
+    let dy = e.clientY - startY;
 
-    if (dragged >= THRESHOLD) {
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > MAX_DIST) {
+      const ratio = MAX_DIST / dist;
+      dx *= ratio;
+      dy *= ratio;
+    }
+    dragX = dx; dragY = dy;
+
+    handle.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx * 0.08}deg)`;
+    updateCable(dx, dy);
+
+    if (dist >= THRESHOLD) {
       handle.style.boxShadow = '0 0 12px var(--accent), 0 0 24px rgba(196,30,58,0.4)';
       if (cableSvg) cableSvg.style.filter = 'drop-shadow(0 0 4px var(--accent))';
     } else {
@@ -282,22 +300,22 @@ function attachPullCord(assembly) {
     }
   };
 
-  const onUp = (e) => {
+  const onUp = () => {
     if (!isDragging) return;
     isDragging = false;
     document.body.classList.remove('shaking');
     handle.style.boxShadow = '';
     if (cableSvg) cableSvg.style.filter = '';
 
-    if (dragged >= THRESHOLD) {
+    const dist = Math.sqrt(dragX * dragX + dragY * dragY);
+    if (dist >= THRESHOLD) {
       const id = parseInt(assembly.dataset.id);
       playEngineSound();
       triggerComplete(id);
     }
 
-    // Spring-back animation
     handle.style.transition = 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)';
-    handle.style.transform = 'translateY(0) rotate(0deg)';
+    handle.style.transform = 'translate(0, 0) rotate(0deg)';
 
     const cleanup = () => {
       handle.style.transition = '';
@@ -415,7 +433,7 @@ document.getElementById('btn-scoring-confirm').addEventListener('click', async (
   }
 
   closeScoring();
-  loadTodos();
+  await loadTodos();
 });
 
 function closeScoring() {
