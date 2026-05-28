@@ -126,9 +126,9 @@ function renderTodos() {
            title="${todo.status === 'completed' ? '已讨伐' : '下拉讨伐'}">
         <div class="todo-item__handle">
           <svg viewBox="0 0 28 28" width="26" height="26" class="todo-item__handle-svg">
-            <polygon points="14,3 3,23 25,23" fill="none" stroke="#c49550" stroke-width="2.5" stroke-linejoin="round"/>
-            <polygon points="14,7 7,21 21,21" fill="none" stroke="#a07040" stroke-width="1.2" stroke-linejoin="round" opacity="0.6"/>
-            <circle cx="14" cy="23" r="2.2" fill="#8b6914"/>
+            <polygon points="14,3 3,23 25,23" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linejoin="round"/>
+            <polygon points="14,7 7,21 21,21" fill="none" stroke="#444" stroke-width="1.2" stroke-linejoin="round" opacity="0.5"/>
+            <circle cx="14" cy="23" r="2.2" fill="#1a1a1a"/>
           </svg>
         </div>
       </div>
@@ -171,10 +171,10 @@ function renderScratch() {
     <svg viewBox="0 0 100 14" preserveAspectRatio="none">
       <!-- Chainsaw teeth cut: jagged zigzag slash -->
       <path d="M0,6 L8,3 L15,7 L22,4 L30,8 L38,5 L46,9 L54,4 L62,8 L70,3 L78,7 L85,4 L92,8 L100,5"
-        stroke="#3d0808" stroke-width="3.5" fill="none" stroke-linejoin="round" stroke-linecap="round" opacity="0.8"/>
+        stroke="#999" stroke-width="3.5" fill="none" stroke-linejoin="round" stroke-linecap="round" opacity="0.8"/>
       <!-- Inner highlight for torn-edge depth -->
       <path d="M0,5.5 L8,2.5 L15,6.5 L22,3.5 L30,7.5 L38,4.5 L46,8.5 L54,3.5 L62,7.5 L70,2.5 L78,6.5 L85,3.5 L92,7.5 L100,4.5"
-        stroke="#6b1818" stroke-width="1.2" fill="none" stroke-linejoin="round" stroke-linecap="round" opacity="0.5"/>
+        stroke="#bbb" stroke-width="1.2" fill="none" stroke-linejoin="round" stroke-linecap="round" opacity="0.5"/>
     </svg>
   </span>`;
 }
@@ -203,9 +203,9 @@ function attachPullCord(assembly) {
     grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
 
     const stop1 = document.createElementNS(ns, 'stop');
-    stop1.setAttribute('offset', '0%'); stop1.setAttribute('stop-color', '#4a4a4a');
+    stop1.setAttribute('offset', '0%'); stop1.setAttribute('stop-color', '#1a1a1a');
     const stop2 = document.createElementNS(ns, 'stop');
-    stop2.setAttribute('offset', '100%'); stop2.setAttribute('stop-color', '#4a4a4a');
+    stop2.setAttribute('offset', '100%'); stop2.setAttribute('stop-color', '#1a1a1a');
     grad.appendChild(stop1); grad.appendChild(stop2);
     defs.appendChild(grad);
     cableSvg.appendChild(defs);
@@ -220,7 +220,7 @@ function attachPullCord(assembly) {
 
     const shadowPath = document.createElementNS(ns, 'path');
     shadowPath.classList.add('todo-item__cable-shadow');
-    shadowPath.setAttribute('stroke', 'rgba(0,0,0,0.25)');
+    shadowPath.setAttribute('stroke', 'rgba(0,0,0,0.12)');
     shadowPath.setAttribute('stroke-width', '1.5');
     shadowPath.setAttribute('fill', 'none');
     shadowPath.setAttribute('stroke-linecap', 'round');
@@ -288,15 +288,14 @@ function attachPullCord(assembly) {
     }
     dragX = dx; dragY = dy;
 
-    handle.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx * 0.08}deg)`;
+    const angle = Math.atan2(-dx, dy) * 180 / Math.PI;
+    handle.style.transform = `translate(${dx}px, ${dy}px) rotate(${angle}deg)`;
     updateCable(dx, dy);
 
     if (dist >= THRESHOLD) {
-      handle.style.boxShadow = '0 0 12px var(--accent), 0 0 24px rgba(196,30,58,0.4)';
-      if (cableSvg) cableSvg.style.filter = 'drop-shadow(0 0 4px var(--accent))';
+      handle.style.filter = 'drop-shadow(0 0 4px var(--accent)) drop-shadow(0 0 8px rgba(196,30,58,0.5))';
     } else {
-      handle.style.boxShadow = '';
-      if (cableSvg) cableSvg.style.filter = '';
+      handle.style.filter = '';
     }
   };
 
@@ -304,8 +303,7 @@ function attachPullCord(assembly) {
     if (!isDragging) return;
     isDragging = false;
     document.body.classList.remove('shaking');
-    handle.style.boxShadow = '';
-    if (cableSvg) cableSvg.style.filter = '';
+    handle.style.filter = '';
 
     const dist = Math.sqrt(dragX * dragX + dragY * dragY);
     if (dist >= THRESHOLD) {
@@ -337,36 +335,22 @@ function attachPullCord(assembly) {
 }
 
 // ─── Audio ──────────────────────────────────────
-let audioCtx = null;
+let chainsawAudio = null;
 
 function playEngineSound() {
   if (isMuted) return;
   try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const now = audioCtx.currentTime;
-
-    const clickOsc = audioCtx.createOscillator();
-    const clickGain = audioCtx.createGain();
-    clickOsc.type = 'square';
-    clickOsc.frequency.setValueAtTime(800, now);
-    clickOsc.frequency.exponentialRampToValueAtTime(200, now + 0.05);
-    clickGain.gain.setValueAtTime(0.3, now);
-    clickGain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
-    clickOsc.connect(clickGain); clickGain.connect(audioCtx.destination);
-    clickOsc.start(now); clickOsc.stop(now + 0.08);
-
-    const rumbleOsc = audioCtx.createOscillator();
-    const rumbleGain = audioCtx.createGain();
-    rumbleOsc.type = 'sawtooth';
-    rumbleOsc.frequency.setValueAtTime(80, now + 0.05);
-    rumbleOsc.frequency.linearRampToValueAtTime(150, now + 0.3);
-    rumbleOsc.frequency.linearRampToValueAtTime(60, now + 0.8);
-    rumbleGain.gain.setValueAtTime(0, now + 0.05);
-    rumbleGain.gain.linearRampToValueAtTime(0.15, now + 0.15);
-    rumbleGain.gain.linearRampToValueAtTime(0.08, now + 0.8);
-    rumbleGain.gain.exponentialRampToValueAtTime(0.01, now + 1.0);
-    rumbleOsc.connect(rumbleGain); rumbleGain.connect(audioCtx.destination);
-    rumbleOsc.start(now + 0.05); rumbleOsc.stop(now + 1.0);
+    if (!chainsawAudio) {
+      chainsawAudio = new Audio('../assets/combined_full.mp3');
+    }
+    chainsawAudio.currentTime = 0;
+    chainsawAudio.play().catch(e => console.warn('Audio play failed:', e));
+    setTimeout(() => {
+      if (chainsawAudio) {
+        chainsawAudio.pause();
+        chainsawAudio.currentTime = 0;
+      }
+    }, 10000);
   } catch (e) { console.warn('Audio failed:', e); }
 }
 
@@ -386,15 +370,20 @@ function triggerComplete(id) {
 // Daisy SVG (petals only, no leaves)
 function daisySVG() {
   const petals = [0, 45, 90, 135, 180, 225, 270, 315].map(deg =>
-    `<ellipse cx="12" cy="4" rx="3.5" ry="7" transform="rotate(${deg},12,12)" fill="#fff" opacity="0.9"/>`
+    `<ellipse cx="12" cy="4" rx="3.5" ry="7" transform="rotate(${deg},12,12)" fill="#fff" stroke="#ccc" stroke-width="0.5" opacity="0.9"/>`
   ).join('');
   return `<svg viewBox="0 0 24 24" width="22" height="22">${petals}<circle cx="12" cy="12" r="4" fill="#c4956b"/><circle cx="12" cy="12" r="3" fill="#d4a574"/></svg>`;
+}
+
+function onScoringMouseLeave() {
+  if (scoringLocked) return;
+  renderScoringBoxes(selectedScore);
 }
 
 function renderScoringBoxes(previewEnd) {
   const container = document.getElementById('scoring-boxes');
   let html = '';
-  for (let i = 0; i <= 10; i++) {
+  for (let i = 1; i <= 10; i++) {
     const filled = i <= previewEnd;
     const locked = scoringLocked && i === selectedScore;
     html += `<div class="scoring__box ${filled ? 'scoring__box--filled' : ''} ${locked ? 'scoring__box--locked' : ''}"
@@ -410,17 +399,16 @@ function renderScoringBoxes(previewEnd) {
       renderScoringBoxes(score);
     });
 
-    box.addEventListener('click', () => {
+    box.addEventListener('mousedown', (e) => {
+      e.preventDefault();
       scoringLocked = true;
       selectedScore = score;
       renderScoringBoxes(score);
     });
   });
 
-  container.addEventListener('mouseleave', () => {
-    if (scoringLocked) return;
-    renderScoringBoxes(selectedScore);
-  });
+  container.removeEventListener('mouseleave', onScoringMouseLeave);
+  container.addEventListener('mouseleave', onScoringMouseLeave);
 }
 
 document.getElementById('btn-scoring-confirm').addEventListener('click', async () => {
@@ -593,7 +581,7 @@ async function openSettings() {
 
     const autoVal = await api().getAutoLaunch();
     updateToggle('btn-autostart-toggle', autoVal);
-  } catch (e) {}
+  } catch (e) { console.error('Failed to load settings:', e); }
 }
 
 function updateToggle(btnId, isOn) {
@@ -604,16 +592,18 @@ function updateToggle(btnId, isOn) {
 
 document.getElementById('btn-mute-toggle').addEventListener('click', async () => {
   isMuted = !isMuted;
-  try { await api().setSetting({ key: 'muted', value: String(isMuted) }); } catch (e) {}
+  try { await api().setSetting({ key: 'muted', value: String(isMuted) }); } catch (e) { console.error('Failed to save mute setting:', e); }
   updateToggle('btn-mute-toggle', isMuted);
 });
 
 document.getElementById('btn-autostart-toggle').addEventListener('click', async () => {
   try {
     const current = await api().getAutoLaunch();
-    await api().setAutoLaunch(!current);
-    updateToggle('btn-autostart-toggle', !current);
-  } catch (e) {}
+    const success = await api().setAutoLaunch(!current);
+    if (success) {
+      updateToggle('btn-autostart-toggle', !current);
+    }
+  } catch (e) { console.error('Failed to toggle auto-start:', e); }
 });
 
 document.getElementById('btn-settings-close').addEventListener('click', () => {

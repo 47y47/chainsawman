@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const initSqlJs = require('sql.js');
 const AutoLaunch = require('electron-auto-launch');
+const { exec } = require('child_process');
 
 // ─── Database ──────────────────────────────────────
 let db;
@@ -274,27 +275,48 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-auto-launch', async () => {
-    if (!autoLauncher) return false;
-    return await autoLauncher.isEnabled();
+    const row = queryOne("SELECT value FROM settings WHERE key = 'auto_start'");
+    return row ? row.value === 'true' : false;
   });
 
   ipcMain.handle('set-auto-launch', async (_, enabled) => {
-    if (!autoLauncher) return false;
+    const appName = '电锯人待办';
+    const appPath = process.execPath;
+    const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+
+    // Always persist to DB first (guaranteed source of truth)
+    db.run(
+      "INSERT OR REPLACE INTO settings (key, value) VALUES ('auto_start', ?)",
+      [enabled ? 'true' : 'false']
+    );
+    saveDB();
+
+    // Sync to Windows registry via HKCU (no admin required)
     try {
       if (enabled) {
-        await autoLauncher.enable();
+        const cmd = `reg add "${regKey}" /v "${appName}" /t REG_SZ /d "\\"${appPath}\\"" /f`;
+        await new Promise((resolve) => {
+          exec(cmd, (err) => {
+            if (err) console.error('Auto-start registry add failed:', err.message);
+            resolve();
+          });
+        });
       } else {
-        await autoLauncher.disable();
+        const cmd = `reg delete "${regKey}" /v "${appName}" /f`;
+        await new Promise((resolve) => {
+          exec(cmd, (err) => {
+            if (err && !err.message.includes('unable to find')) {
+              console.error('Auto-start registry delete failed:', err.message);
+            }
+            resolve();
+          });
+        });
       }
-      db.run(
-        "INSERT OR REPLACE INTO settings (key, value) VALUES ('auto_start', ?)",
-        [enabled ? 'true' : 'false']
-      );
-      saveDB();
-      return true;
     } catch (e) {
-      return false;
+      console.error('Auto-start registry sync error:', e);
     }
+
+    return true;
   });
 
   ipcMain.handle('set-setting', (_, { key, value }) => {
@@ -305,23 +327,41 @@ function setupIPC() {
 }
 
 // ─── Auto Launch ────────────────────────────────────
-let autoLauncher = null;
 
-async function setupAutoLaunch() {
-  autoLauncher = new AutoLaunch({ name: '电锯人待办' });
+function getRegAutoStart() {
+  const appName = '电锯人待办';
+  const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+  return new Promise((resolve) => {
+    exec(`reg query "${regKey}" /v "${appName}"`, (err) => {
+      resolve(!err); // true if key exists, false otherwise
+    });
+  });
+}
+
+async function syncAutoLaunch() {
   try {
     const row = queryOne("SELECT value FROM settings WHERE key = 'auto_start'");
-    const shouldEnable = row ? row.value === 'true' : true;
-    const currentlyEnabled = await autoLauncher.isEnabled();
+    const shouldEnable = row ? row.value === 'true' : false;
+    const currentlyEnabled = await getRegAutoStart();
 
     if (shouldEnable && !currentlyEnabled) {
-      await autoLauncher.enable();
+      const appPath = process.execPath;
+      const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+      const cmd = `reg add "${regKey}" /v "电锯人待办" /t REG_SZ /d "\\"${appPath}\\"" /f`;
+      exec(cmd, (err) => {
+        if (err) console.error('Auto-start sync add failed:', err.message);
+      });
     } else if (!shouldEnable && currentlyEnabled) {
-      await autoLauncher.disable();
+      const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+      const cmd = `reg delete "${regKey}" /v "电锯人待办" /f`;
+      exec(cmd, (err) => {
+        if (err && !err.message.includes('unable to find')) {
+          console.error('Auto-start sync delete failed:', err.message);
+        }
+      });
     }
   } catch (e) {
-    // Fallback: enable by default
-    autoLauncher.enable().catch(() => {});
+    console.error('Auto-start sync error:', e);
   }
 }
 
@@ -352,7 +392,7 @@ app.whenReady().then(async () => {
   setupIPC();
   createWindow();
   createTray();
-  setupAutoLaunch();
+  syncAutoLaunch();
   startReminderTimer();
 });
 
