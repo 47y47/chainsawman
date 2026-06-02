@@ -6,6 +6,8 @@
   const PET_H = 80;            // walk display height
   const JUMP_W = 100;          // jump display width
   const JUMP_H = 100;          // jump display height
+  const BATTLE_W = 100;        // battle display width
+  const BATTLE_H = 100;        // battle display height
   const SPEED = 40;            // patrol speed (px/s)
   const FRAME_COUNT = 8;       // walk frames in sprite sheet
   const FRAME_W = 80;          // single frame display width
@@ -155,6 +157,11 @@
             this.battlePhase = 'strike';
             this.battleStrikeTime = now;
             this.battleTargetEl.classList.add('todo--shatter');
+            // Shake battle image
+            this.spriteEl.classList.add('pet--shake');
+            // Spawn sparks & particles
+            this._spawnSparks(this.battleTargetRect);
+            this._spawnParticles(this.battleTargetRect);
           }
         } else if (this.battlePhase === 'strike') {
           // Hold at target for 500ms
@@ -172,10 +179,16 @@
             this.x = this.battlePrevX;
             this.baseY = this.battlePrevY;
             this.battleTargetEl.classList.remove('todo--shatter');
+            this.spriteEl.classList.remove('pet--shake');
             this.spriteEl.style.backgroundImage = '';
             this.spriteEl.style.backgroundSize = '';
             this.spriteEl.style.backgroundPosition = '';
             this.spriteEl.style.backgroundRepeat = '';
+            // Restore walk size
+            this.spriteEl.style.width = PET_W + 'px';
+            this.spriteEl.style.height = PET_H + 'px';
+            this.spriteWrap.style.width = PET_W + 'px';
+            this.spriteWrap.style.height = PET_H + 'px';
             this.state = 'patrol';
             this.battleTargetEl = null;
           }
@@ -209,9 +222,10 @@
 
       // Target: center on the todo item
       const targetRect = targetEl.getBoundingClientRect();
+      this.battleTargetRect = targetRect;
       this.battleTargetEl = targetEl;
-      this.battleTargetX = targetRect.left + targetRect.width / 2 - PET_W / 2;
-      this.battleTargetY = targetRect.top + targetRect.height / 2 - PET_H / 2;
+      this.battleTargetX = targetRect.left + targetRect.width / 2 - BATTLE_W / 2;
+      this.battleTargetY = targetRect.top + targetRect.height / 2 - BATTLE_H / 2;
       this.battlePhase = 'rise';   // rise → strike → fall
       this.battleRiseStart = performance.now();
 
@@ -224,11 +238,59 @@
       // Face toward todo
       this.facingRight = this.battleTargetX > this.x;
 
+      // Enlarge for battle mode
+      this.spriteEl.style.width = BATTLE_W + 'px';
+      this.spriteEl.style.height = BATTLE_H + 'px';
+      this.spriteWrap.style.width = BATTLE_W + 'px';
+      this.spriteWrap.style.height = BATTLE_H + 'px';
+
       // Switch to battle image
       this.spriteEl.style.backgroundImage = `url('${BATTLE_IMG}')`;
       this.spriteEl.style.backgroundSize = 'contain';
       this.spriteEl.style.backgroundPosition = 'center';
       this.spriteEl.style.backgroundRepeat = 'no-repeat';
+    }
+
+    /* ── VFX helpers ────────────────────────────── */
+    _spawnSparks(rect) {
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const colors = ['#ff6600', '#ffaa00', '#ff3300', '#ffcc00', '#fff'];
+      for (let i = 0; i < 12; i++) {
+        const spark = document.createElement('div');
+        spark.className = 'pet-spark';
+        const angle = (Math.PI * 2 * i) / 12 + Math.random() * 0.5;
+        const dist = 30 + Math.random() * 40;
+        spark.style.cssText = `
+          left: ${cx}px; top: ${cy}px;
+          width: 4px; height: 4px;
+          background: ${colors[i % colors.length]};
+          --sx: ${Math.cos(angle) * dist}px;
+          --sy: ${Math.sin(angle) * dist}px;
+        `;
+        document.body.appendChild(spark);
+        setTimeout(() => spark.remove(), 500);
+      }
+    }
+
+    _spawnParticles(rect) {
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      for (let i = 0; i < 8; i++) {
+        const p = document.createElement('div');
+        p.className = 'pet-particle';
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 50 + Math.random() * 60;
+        const size = 6 + Math.random() * 8;
+        p.style.cssText = `
+          left: ${cx}px; top: ${cy}px;
+          width: ${size}px; height: ${size}px;
+          --sx: ${Math.cos(angle) * dist}px;
+          --sy: ${Math.sin(angle) * dist}px;
+        `;
+        document.body.appendChild(p);
+        setTimeout(() => p.remove(), 600);
+      }
     }
 
     celebrate() {
