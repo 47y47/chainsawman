@@ -28,7 +28,7 @@
       this.frameIdx = 0;
       this.frameTimer = 0;
       this.lastTime = performance.now();
-      this.jumpTimer = null;
+      this.landTimer = null;
 
       this._onClick = this._onClick.bind(this);
       this._loop = this._loop.bind(this);
@@ -82,23 +82,44 @@
     _onClick(e) {
       e.preventDefault();
       e.stopPropagation();
-      if (this.state === 'jump') return;
 
-      this.state = 'jump';
-      this.spriteWrap.style.display = 'none';
-      this.jumpWrap.style.display = 'block';
-      this.jumpWrap.style.transform = this.facingRight ? 'scaleX(1)' : 'scaleX(-1)';
+      // Cancel any in-progress landing
+      if (this.landTimer) { clearTimeout(this.landTimer); this.landTimer = null; }
 
+      // First click in a series: switch to jump image
+      if (this.state !== 'jump') {
+        this.state = 'jump';
+        this.bounceStack = 0;
+        this.spriteWrap.style.display = 'none';
+        this.jumpWrap.style.display = 'block';
+      }
+
+      // Stack additional bounce height per click
+      this.bounceStack++;
+      const offsetY = -this.bounceStack * 16; // 16px higher per click
+      const flip = this.facingRight ? 'scaleX(1)' : 'scaleX(-1)';
+      this.jumpWrap.style.transform = `${flip} translateY(${offsetY}px)`;
+
+      // Re-trigger bounce animation on the image
       this.jumpImg.classList.remove('pet--bounce');
       void this.jumpImg.offsetWidth;
       this.jumpImg.classList.add('pet--bounce');
 
+      // Reset timer — jump ends when user stops clicking
       if (this.jumpTimer) clearTimeout(this.jumpTimer);
       this.jumpTimer = setTimeout(() => {
+        // Smooth landing: transition translateY back to 0
         this.jumpImg.classList.remove('pet--bounce');
-        this.jumpWrap.style.display = 'none';
-        this.spriteWrap.style.display = 'block';
-        this.state = 'patrol';
+        const flip = this.facingRight ? 'scaleX(1)' : 'scaleX(-1)';
+        this.jumpWrap.style.transform = flip; // CSS transition handles the fall
+        // After transition, swap back to walk sprite
+        this.landTimer = setTimeout(() => {
+          this.jumpWrap.style.display = 'none';
+          this.spriteWrap.style.display = 'block';
+          this.state = 'patrol';
+          this.bounceStack = 0;
+          this.landTimer = null;
+        }, 350); // match CSS transition duration
       }, JUMP_DURATION);
     }
 

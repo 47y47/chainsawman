@@ -35,6 +35,7 @@
   display: none;
   pointer-events: auto;
   cursor: pointer;
+  transition: transform 0.35s ease-out;
 }
 
 .pet__jump {
