@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>电锯人待办</title>
   <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/pet.css">
 </head>
 <body>
   <div id="app">
@@ -112,6 +113,17 @@
     <button class="context-menu__item context-menu__item--danger" data-action="delete">废除</button>
   </div>
 
+  <!-- 波奇塔桌宠 -->
+  <div id="pet-container">
+    <div class="pet__sprite-wrap">
+      <img class="pet__sprite" src="../assets/images/pochita.png" alt="波奇塔" draggable="false">
+    </div>
+    <div class="pet__jump-wrap">
+      <img class="pet__jump" src="../assets/images/pochita_jump.png" alt="波奇塔" draggable="false">
+    </div>
+  </div>
+
   <script src="main.js"></script>
+  <script src="pet.js"></script>
 </body>
 </html>

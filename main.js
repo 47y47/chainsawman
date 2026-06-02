@@ -92,7 +92,7 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadFile('src/index.html');
+  mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

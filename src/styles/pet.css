@@ -1,0 +1,62 @@
+/* ─── 波奇塔桌面宠物 v2.1 ─────────────────────── */
+
+#pet-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* ── Patrol sprite ────────────────────────────── */
+.pet__sprite-wrap {
+  display: block;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.pet__sprite {
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+  animation: pet-bob 0.45s ease-in-out infinite alternate;
+}
+
+.pet__sprite-wrap:hover .pet__sprite {
+  filter: brightness(1.1) drop-shadow(0 2px 6px rgba(0,0,0,0.3));
+}
+
+/* ── Jump overlay ─────────────────────────────── */
+.pet__jump-wrap {
+  display: none;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.pet__jump {
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* ── Bobbing (patrol) ─────────────────────────── */
+@keyframes pet-bob {
+  from { transform: translateY(-4px); }
+  to   { transform: translateY(2px); }
+}
+
+/* ── Bounce (jump click) ──────────────────────── */
+@keyframes pet-bounce {
+  0%   { transform: translateY(0) scale(1); }
+  20%  { transform: translateY(-24px) scale(1.08); }
+  40%  { transform: translateY(-30px) scale(0.95); }
+  55%  { transform: translateY(-8px) scale(1.04); }
+  70%  { transform: translateY(-16px) scale(0.97); }
+  85%  { transform: translateY(-3px) scale(1.01); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+.pet--bounce {
+  animation: pet-bounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
