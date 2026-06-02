@@ -1,11 +1,16 @@
-/* ─── 波奇塔桌面宠物 v2.1 — 单图巡逻 ──────────── */
+/* ─── 波奇塔桌面宠物 v2.2 — 8 帧精灵动画 ──────── */
 (function () {
   'use strict';
 
-  const PET_W = 100;           // display width (px)
-  const PET_H = 100;
-  const SPEED = 40;           // patrol speed (px/s)
-  const JUMP_DURATION = 500;  // ms
+  const PET_W = 80;            // walk display width (px)
+  const PET_H = 80;            // walk display height
+  const JUMP_W = 100;          // jump display width
+  const JUMP_H = 100;          // jump display height
+  const SPEED = 40;            // patrol speed (px/s)
+  const FRAME_COUNT = 8;       // walk frames in sprite sheet
+  const FRAME_W = 80;          // single frame display width
+  const FRAME_INTERVAL = 120;  // ms per frame (~8.3 fps)
+  const JUMP_DURATION = 500;
 
   class PochitaPet {
     constructor(container) {
@@ -20,6 +25,8 @@
       this.leftBound = 0;
       this.rightBound = 0;
       this.state = 'patrol';
+      this.frameIdx = 0;
+      this.frameTimer = 0;
       this.lastTime = performance.now();
       this.jumpTimer = null;
 
@@ -35,10 +42,10 @@
       this.spriteWrap.style.height = PET_H + 'px';
       this.spriteEl.style.width = PET_W + 'px';
       this.spriteEl.style.height = PET_H + 'px';
-      this.jumpWrap.style.width = PET_W + 'px';
-      this.jumpWrap.style.height = PET_H + 'px';
-      this.jumpImg.style.width = PET_W + 'px';
-      this.jumpImg.style.height = PET_H + 'px';
+      this.jumpWrap.style.width = JUMP_W + 'px';
+      this.jumpWrap.style.height = JUMP_H + 'px';
+      this.jumpImg.style.width = JUMP_W + 'px';
+      this.jumpImg.style.height = JUMP_H + 'px';
 
       this.container.addEventListener('click', this._onClick);
       this.container.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -100,6 +107,14 @@
       this.lastTime = now;
 
       if (this.state === 'patrol') {
+        // Frame cycling
+        this.frameTimer += dt * 1000;
+        if (this.frameTimer >= FRAME_INTERVAL) {
+          this.frameTimer -= FRAME_INTERVAL;
+          this.frameIdx = (this.frameIdx + 1) % FRAME_COUNT;
+        }
+
+        // Movement
         const dir = this.facingRight ? 1 : -1;
         this.x += SPEED * dt * dir;
 
@@ -117,9 +132,11 @@
     }
 
     _render() {
-      const flip = this.facingRight ? 'scaleX(1)' : 'scaleX(-1)';
+      const flip = this.facingRight ? 'scaleX(-1)' : 'scaleX(1)';
       this.container.style.transform = `translate(${Math.round(this.x)}px, ${Math.round(this.baseY)}px)`;
       this.spriteWrap.style.transform = flip;
+      // Advance sprite sheet frame
+      this.spriteEl.style.backgroundPositionX = (-this.frameIdx * FRAME_W) + 'px';
     }
 
     celebrate() {}

@@ -18,9 +18,12 @@
 
 .pet__sprite {
   display: block;
-  object-fit: contain;
   pointer-events: none;
-  animation: pet-bob 0.45s ease-in-out infinite alternate;
+  background-image: url('../../assets/images/pochita_walk.png');
+  background-size: 640px 80px;    /* 8 frames × 80px */
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  image-rendering: auto;
 }
 
 .pet__sprite-wrap:hover .pet__sprite {
@@ -38,12 +41,6 @@
   display: block;
   object-fit: contain;
   pointer-events: none;
-}
-
-/* ── Bobbing (patrol) ─────────────────────────── */
-@keyframes pet-bob {
-  from { transform: translateY(-4px); }
-  to   { transform: translateY(2px); }
 }
 
 /* ── Bounce (jump click) ──────────────────────── */
