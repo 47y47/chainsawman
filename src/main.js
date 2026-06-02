@@ -413,15 +413,26 @@ function renderScoringBoxes(previewEnd) {
 
 document.getElementById('btn-scoring-confirm').addEventListener('click', async () => {
   const score = selectedScore;
+  const completedId = pendingCompleteId; // save before closeScoring clears it
 
-  if (pendingCompleteId) {
+  if (completedId) {
     try {
-      await api().completeTodo({ id: pendingCompleteId, score });
+      await api().completeTodo({ id: completedId, score });
     } catch (e) { console.error('Failed to complete todo:', e); }
   }
 
   closeScoring();
   await loadTodos();
+
+  // Trigger Pochita battle charge toward the completed todo
+  if (completedId) {
+    setTimeout(() => {
+      const target = document.querySelector(`.todo-item[data-id="${completedId}"]`);
+      if (target && window.__pochitaPet) {
+        window.__pochitaPet.battle(target);
+      }
+    }, 200); // small delay so DOM is settled
+  }
 });
 
 function closeScoring() {

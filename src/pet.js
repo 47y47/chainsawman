@@ -11,6 +11,8 @@
   const FRAME_W = 80;          // single frame display width
   const FRAME_INTERVAL = 120;  // ms per frame (~8.3 fps)
   const JUMP_DURATION = 500;
+  const BATTLE_IMG = '../assets/images/pochita_battle.png';
+  const WALK_IMG = '../assets/images/pochita_walk.png';
 
   class PochitaPet {
     constructor(container) {
@@ -59,6 +61,7 @@
     }
 
     _calcBounds() {
+      if (this.state === 'battle') return; // don't reset during charge
       const footer = document.querySelector('.footer');
       if (footer) {
         const fr = footer.getBoundingClientRect();
@@ -82,6 +85,7 @@
     _onClick(e) {
       e.preventDefault();
       e.stopPropagation();
+      if (this.state === 'battle') return; // ignore clicks during battle
 
       // Cancel any in-progress landing
       if (this.landTimer) { clearTimeout(this.landTimer); this.landTimer = null; }
@@ -128,23 +132,53 @@
       this.lastTime = now;
 
       if (this.state === 'patrol') {
-        // Frame cycling
         this.frameTimer += dt * 1000;
         if (this.frameTimer >= FRAME_INTERVAL) {
           this.frameTimer -= FRAME_INTERVAL;
           this.frameIdx = (this.frameIdx + 1) % FRAME_COUNT;
         }
-
-        // Movement
         const dir = this.facingRight ? 1 : -1;
         this.x += SPEED * dt * dir;
+        if (this.x >= this.rightBound) { this.x = this.rightBound; this.facingRight = false; }
+        else if (this.x <= this.leftBound) { this.x = this.leftBound; this.facingRight = true; }
+      }
 
-        if (this.x >= this.rightBound) {
-          this.x = this.rightBound;
-          this.facingRight = false;
-        } else if (this.x <= this.leftBound) {
-          this.x = this.leftBound;
-          this.facingRight = true;
+      else if (this.state === 'battle') {
+        const elapsed = now - (this.battleRiseStart || now);
+        if (this.battlePhase === 'rise') {
+          // Rise over 2 seconds with ease-out
+          const t = Math.min(elapsed / 2000, 1);
+          const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+          this.x = this.battlePrevX + (this.battleTargetX - this.battlePrevX) * ease;
+          this.baseY = this.battlePrevY + (this.battleTargetY - this.battlePrevY) * ease;
+          if (t >= 1) {
+            this.battlePhase = 'strike';
+            this.battleStrikeTime = now;
+            this.battleTargetEl.classList.add('todo--shatter');
+          }
+        } else if (this.battlePhase === 'strike') {
+          // Hold at target for 500ms
+          if (now - this.battleStrikeTime > 500) {
+            this.battlePhase = 'fall';
+            this.battleFallStart = now;
+          }
+        } else if (this.battlePhase === 'fall') {
+          // Fall back over 1.5 seconds with ease-in
+          const t = Math.min((now - this.battleFallStart) / 1500, 1);
+          const ease = t * t * t; // ease-in cubic
+          this.x = this.battleTargetX + (this.battlePrevX - this.battleTargetX) * ease;
+          this.baseY = this.battleTargetY + (this.battlePrevY - this.battleTargetY) * ease;
+          if (t >= 1) {
+            this.x = this.battlePrevX;
+            this.baseY = this.battlePrevY;
+            this.battleTargetEl.classList.remove('todo--shatter');
+            this.spriteEl.style.backgroundImage = '';
+            this.spriteEl.style.backgroundSize = '';
+            this.spriteEl.style.backgroundPosition = '';
+            this.spriteEl.style.backgroundRepeat = '';
+            this.state = 'patrol';
+            this.battleTargetEl = null;
+          }
         }
       }
 
@@ -156,11 +190,50 @@
       const flip = this.facingRight ? 'scaleX(-1)' : 'scaleX(1)';
       this.container.style.transform = `translate(${Math.round(this.x)}px, ${Math.round(this.baseY)}px)`;
       this.spriteWrap.style.transform = flip;
-      // Advance sprite sheet frame
-      this.spriteEl.style.backgroundPositionX = (-this.frameIdx * FRAME_W) + 'px';
+      // Walk sprite frame — skip during battle (uses battle image instead)
+      if (this.state !== 'battle') {
+        this.spriteEl.style.backgroundPositionX = (-this.frameIdx * FRAME_W) + 'px';
+      }
     }
 
-    celebrate() {}
+    /* ── battle: rise from patrol to target, shatter, fall back ── */
+    battle(targetEl) {
+      if (!targetEl || this.state === 'battle') return;
+
+      if (this.jumpTimer) { clearTimeout(this.jumpTimer); this.jumpTimer = null; }
+      if (this.landTimer) { clearTimeout(this.landTimer); this.landTimer = null; }
+
+      // Save patrol position
+      this.battlePrevX = this.x;
+      this.battlePrevY = this.baseY;
+
+      // Target: center on the todo item
+      const targetRect = targetEl.getBoundingClientRect();
+      this.battleTargetEl = targetEl;
+      this.battleTargetX = targetRect.left + targetRect.width / 2 - PET_W / 2;
+      this.battleTargetY = targetRect.top + targetRect.height / 2 - PET_H / 2;
+      this.battlePhase = 'rise';   // rise → strike → fall
+      this.battleRiseStart = performance.now();
+
+      this.state = 'battle';
+
+      // Ensure walk sprite layer is visible
+      this.spriteWrap.style.display = 'block';
+      this.jumpWrap.style.display = 'none';
+
+      // Face toward todo
+      this.facingRight = this.battleTargetX > this.x;
+
+      // Switch to battle image
+      this.spriteEl.style.backgroundImage = `url('${BATTLE_IMG}')`;
+      this.spriteEl.style.backgroundSize = 'contain';
+      this.spriteEl.style.backgroundPosition = 'center';
+      this.spriteEl.style.backgroundRepeat = 'no-repeat';
+    }
+
+    celebrate() {
+      // Reserved for other triggers
+    }
 
     destroy() {
       if (this.jumpTimer) clearTimeout(this.jumpTimer);
