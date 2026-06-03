@@ -183,9 +183,9 @@
           // Multi-strike: attack(0.35s) → pause(0.15s) → attack → pause → attack → final(0.4s)
           // Animation plays continuously, cracks progress on each attack
           const strikeElapsed = now - this.battleStrikeTime;
-          const ATK = 350, PAUSE = 400, FINAL = 500;
+          const ATK = 350, PAUSE = 400;
           const fullCycle = ATK + PAUSE;
-          const totalStrikes = 4;
+          const totalStrikes = 4; // 4 cracks + 1 break = 5 impacts
 
           const cycleIdx = Math.floor(strikeElapsed / fullCycle);
           const inCycle = strikeElapsed % fullCycle;
@@ -200,23 +200,25 @@
               this._spawnSparks(this.battleTargetRect);
               setTimeout(() => this.spriteEl.classList.remove('pet--shake'), 300);
             }
-          } else if (cycleIdx >= totalStrikes && !this.battleFinalDone) {
+          } else if (!this.battleFinalDone) {
+            // 5th impact: final break → go to fall after hold
             this.battleFinalDone = true;
             this.spriteEl.classList.add('pet--shake');
             this._drawCracks('break');
+            this._spawnShards(this.battleOverlay.getBoundingClientRect());
             this._spawnSparks(this.battleTargetRect);
             this._spawnParticles(this.battleTargetRect);
             setTimeout(() => {
-              if (this.battleTargetEl) this.battleTargetEl.style.display = 'none';
-            }, 300);
-          } else if (cycleIdx > totalStrikes && strikeElapsed > totalStrikes * fullCycle + FINAL) {
-            this.battlePhase = 'fall';
-            this.battleFallStart = now;
-            this.battleAnimPlaying = false;
-            this.spriteEl.classList.remove('pet--shake');
-            this.spriteEl.style.backgroundImage = `url('${BATTLE_IMG}')`;
-            this.spriteEl.style.backgroundSize = 'contain';
-            this.spriteEl.style.backgroundPosition = 'center';
+              if (this.state === 'battle' && this.battlePhase === 'strike') {
+                this.battlePhase = 'fall';
+                this.battleFallStart = performance.now();
+                this.battleAnimPlaying = false;
+                this.spriteEl.classList.remove('pet--shake');
+                this.spriteEl.style.backgroundImage = `url('${BATTLE_IMG}')`;
+                this.spriteEl.style.backgroundSize = 'contain';
+                this.spriteEl.style.backgroundPosition = 'center';
+              }
+            }, 600);
           }
         } else if (this.battlePhase === 'fall') {
           // Fall back over 1.5 seconds with ease-in, no animation
@@ -421,38 +423,43 @@
         return;
       }
 
-      // Each level adds 2 crack lines from roughly center
-      const colors = [
-        'rgba(100,10,10,0.5)', 'rgba(120,20,20,0.6)', 'rgba(150,25,25,0.7)'
-      ];
-      for (let i = 0; i < 2; i++) {
-        // Cracks at varied angles with slight randomness
-        const baseAngles = [10, 70, 130, 200, 260, 310]; // diverse directions
-        const idx = (level - 1) * 2 + i;
-        const angle = (baseAngles[idx % baseAngles.length] + (Math.random() - 0.5) * 30) * Math.PI / 180;
-        const len = (0.4 + Math.random() * 0.45) * Math.max(w, h) / 2;
-        const endX = cx + Math.cos(angle) * len;
-        const endY = cy + Math.sin(angle) * len;
-        // Simple two-segment crack
-        const midX = cx + Math.cos(angle) * len * 0.45 + (Math.random() - 0.5) * len * 0.2;
-        const midY = cy + Math.sin(angle) * len * 0.45 + (Math.random() - 0.5) * len * 0.2;
-        const path = document.createElementNS(ns, 'path');
-        path.setAttribute('d', `M${cx} ${cy} L${midX} ${midY} L${endX} ${endY}`);
-        path.setAttribute('stroke', colors[level - 1] || colors[2]);
-        path.setAttribute('stroke-width', 1.2 + level * 0.4);
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke-linecap', 'round');
-        this.battleCrackSvg.appendChild(path);
-      }
+      // Each level: one main crack extending in a new direction from center
+      // Levels 1-4: cracks spread clockwise around the center
+      const mainAngles = [30, 130, 220, 310]; // degrees, spread out
+      const angleRad = (mainAngles[level - 1] + (Math.random() - 0.5) * 20) * Math.PI / 180;
+      const len = Math.max(w, h) * 0.55;
 
-      // Faint red inner glow
-      const glow = document.createElementNS(ns, 'rect');
-      glow.setAttribute('width', w); glow.setAttribute('height', h);
-      glow.setAttribute('fill', 'none');
-      glow.setAttribute('stroke', `rgba(180,20,20,${0.08 + level * 0.12})`);
-      glow.setAttribute('stroke-width', 3 + level);
-      glow.setAttribute('rx', 4);
-      this.battleCrackSvg.appendChild(glow);
+      // Main crack: center → mid (jagged) → end (branched)
+      const endX = cx + Math.cos(angleRad) * len;
+      const endY = cy + Math.sin(angleRad) * len;
+      const midX = cx + Math.cos(angleRad + 0.15) * len * 0.5;
+      const midY = cy + Math.sin(angleRad + 0.15) * len * 0.5;
+
+      const path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', `M${cx} ${cy} L${midX} ${midY} L${endX} ${endY}`);
+      path.setAttribute('stroke', `rgba(120,15,15,${0.4 + level * 0.15})`);
+      path.setAttribute('stroke-width', 1.5 + level * 0.5);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke-linecap', 'round');
+      this.battleCrackSvg.appendChild(path);
+
+      // Small branch off the main crack
+      const brAngle = angleRad + (Math.random() > 0.5 ? 0.5 : -0.5);
+      const brStartX = cx + Math.cos(angleRad) * len * 0.4;
+      const brStartY = cy + Math.sin(angleRad) * len * 0.4;
+      const brEndX = brStartX + Math.cos(brAngle) * len * 0.3;
+      const brEndY = brStartY + Math.sin(brAngle) * len * 0.3;
+      const branch = document.createElementNS(ns, 'path');
+      branch.setAttribute('d', `M${brStartX} ${brStartY} L${brEndX} ${brEndY}`);
+      branch.setAttribute('stroke', `rgba(100,10,10,${0.3 + level * 0.12})`);
+      branch.setAttribute('stroke-width', 1 + level * 0.3);
+      branch.setAttribute('fill', 'none');
+      branch.setAttribute('stroke-linecap', 'round');
+      this.battleCrackSvg.appendChild(branch);
+
+      // Subtle glow around cracks
+      this.battleOverlay.style.boxShadow =
+        `inset 0 0 ${8 + level * 6}px rgba(200,30,30,${0.08 + level * 0.07})`;
     }
 
     /* ── Shard explosion ─────────────────────────── */
