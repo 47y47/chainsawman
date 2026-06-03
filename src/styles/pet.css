@@ -121,3 +121,18 @@
   0%   { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
   100% { transform: translate(var(--sx), var(--sy)) rotate(180deg) scale(0); opacity: 0; }
 }
+
+/* ── Shards (final break explosion) ───────────── */
+.pet-shard {
+  position: fixed;
+  z-index: 350;
+  pointer-events: none;
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 2px;
+  animation: shard-fly 0.55s ease-out forwards;
+}
+
+@keyframes shard-fly {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+  100% { transform: translate(var(--sx), var(--sy)) rotate(var(--sr)) scale(0.2); opacity: 0; }
+}

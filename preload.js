@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('chainsawAPI', {
 
   // Summary
   getSummary: (data) => ipcRenderer.invoke('get-summary', data),
+  getCompletedTodos: (data) => ipcRenderer.invoke('get-completed-todos', data),
 
   // Recurring
   checkRecurring: () => ipcRenderer.invoke('check-recurring'),

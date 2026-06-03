@@ -108,22 +108,22 @@ async function loadTodos() {
 }
 
 function renderTodos() {
+  const activeTodos = todos.filter(t => t.status !== 'completed');
   const list = document.getElementById('todo-list');
-  if (todos.length === 0) {
+  if (activeTodos.length === 0) {
     list.innerHTML = `<div style="text-align:center; color:var(--text-secondary); padding:40px 0;">
       暂无契约<br><small>订立新的契约吧</small>
     </div>`;
     return;
   }
 
-  list.innerHTML = todos.map(todo => `
-    <div class="todo-item ${todo.status === 'completed' ? 'todo-item--completed' : ''}"
+  list.innerHTML = activeTodos.map(todo => `
+    <div class="todo-item"
          data-id="${todo.id}"
-         data-status="${todo.status}"
          data-type="${todo.todo_type}">
-      <div class="todo-item__pull-assembly ${todo.status === 'completed' ? '' : 'js-handle'}"
+      <div class="todo-item__pull-assembly js-handle"
            data-id="${todo.id}"
-           title="${todo.status === 'completed' ? '已讨伐' : '下拉讨伐'}">
+           title="下拉讨伐">
         <div class="todo-item__handle">
           <svg viewBox="0 0 28 28" width="26" height="26" class="todo-item__handle-svg">
             <polygon points="14,3 3,23 25,23" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linejoin="round"/>
@@ -132,15 +132,11 @@ function renderTodos() {
           </svg>
         </div>
       </div>
-      <span class="todo-item__text">
-        ${escapeHtml(todo.title)}
-        ${todo.status === 'completed' ? renderScratch() : ''}
-      </span>
+      <span class="todo-item__text">${escapeHtml(todo.title)}</span>
       <span class="todo-item__badge todo-item__badge--${todo.todo_type}">
         ${typeLabel(todo.todo_type)}
       </span>
       ${todo.remind_at ? `<span class="todo-item__remind">${todo.remind_at}</span>` : ''}
-      ${todo.status === 'completed' && todo.score != null ? `<span class="todo-item__score">评分 ${todo.score}</span>` : ''}
     </div>
   `).join('');
 
@@ -415,6 +411,12 @@ document.getElementById('btn-scoring-confirm').addEventListener('click', async (
   const score = selectedScore;
   const completedId = pendingCompleteId; // save before closeScoring clears it
 
+  // Save target element and its rect BEFORE loadTodos removes completed items
+  const targetEl = completedId
+    ? document.querySelector(`.todo-item[data-id="${completedId}"]`)
+    : null;
+  const targetRect = targetEl ? targetEl.getBoundingClientRect() : null;
+
   if (completedId) {
     try {
       await api().completeTodo({ id: completedId, score });
@@ -424,14 +426,9 @@ document.getElementById('btn-scoring-confirm').addEventListener('click', async (
   closeScoring();
   await loadTodos();
 
-  // Trigger Pochita battle charge toward the completed todo
-  if (completedId) {
-    setTimeout(() => {
-      const target = document.querySelector(`.todo-item[data-id="${completedId}"]`);
-      if (target && window.__pochitaPet) {
-        window.__pochitaPet.battle(target);
-      }
-    }, 200); // small delay so DOM is settled
+  // Trigger Pochita battle — use saved element (may be detached) and rect
+  if (targetEl && targetRect && window.__pochitaPet) {
+    window.__pochitaPet.battle(targetEl, targetRect);
   }
 });
 
@@ -519,28 +516,64 @@ document.getElementById('context-menu').addEventListener('click', async (e) => {
 async function openSummary() {
   document.getElementById('summary-overlay').classList.remove('hidden');
   try {
-    const summary = await api().getSummary({ year: currentYear, weekNumber: currentWeek });
-    renderSummary(summary);
+    const [summary, completed] = await Promise.all([
+      api().getSummary({ year: currentYear, weekNumber: currentWeek }),
+      api().getCompletedTodos({ year: currentYear, weekNumber: currentWeek })
+    ]);
+    renderSummary(summary, completed.todos);
   } catch (e) { console.error('Failed to get summary:', e); }
 }
 
-function renderSummary(summary) {
+function renderSummary(summary, completedTodos) {
   const avgRounded = Math.round(summary.avgScore);
   const dialogue = getMakimaDialogue(avgRounded, summary);
 
+  // Build completed list HTML (page 2)
+  let listItems = '';
+  if (completedTodos && completedTodos.length > 0) {
+    listItems = completedTodos.map(t => `
+      <div class="summary__completed-item">
+        <span class="summary__completed-score">${t.score}</span>
+        <span class="summary__completed-text">${escapeHtml(t.title)}</span>
+        <span class="summary__completed-time">${(t.completed_at || '').slice(5, 16).replace('T', ' ')}</span>
+      </div>
+    `).join('');
+  } else {
+    listItems = '<div class="summary__empty">本周暂无讨伐记录</div>';
+  }
+
   document.getElementById('summary-content').innerHTML = `
-    <div class="summary__score">${summary.avgScore.toFixed(1)}</div>
-    <div style="color:var(--text-secondary); font-size:13px;">本周平均评分</div>
-    <div class="summary__makima" id="makima-img">
-      <span>Q版玛奇玛<br>(${avgRounded}分)</span>
+    <div class="summary__page">
+      <div class="summary__page-body">
+        <div class="summary__score">${summary.avgScore.toFixed(1)}</div>
+        <div style="color:var(--text-secondary); font-size:13px;">本周平均评分</div>
+        <div class="summary__makima" id="makima-img">
+          <span>Q版玛奇玛<br>(${avgRounded}分)</span>
+        </div>
+        <div class="summary__dialogue">"${escapeHtml(dialogue)}"</div>
+        <div class="summary__stats">
+          <span>讨伐 ${summary.completedCount}/${summary.totalCount}</span>
+          ${summary.maxScore != null ? `<span>最高评分 ${summary.maxScore}</span>` : ''}
+          ${summary.minScore != null ? `<span>最低评分 ${summary.minScore}</span>` : ''}
+        </div>
+      </div>
+      <button class="modal__btn modal__btn--cancel js-summary-close">关闭</button>
     </div>
-    <div class="summary__dialogue">"${escapeHtml(dialogue)}"</div>
-    <div class="summary__stats">
-      <span>讨伐 ${summary.completedCount}/${summary.totalCount}</span>
-      ${summary.maxScore != null ? `<span>最高评分 ${summary.maxScore}</span>` : ''}
-      ${summary.minScore != null ? `<span>最低评分 ${summary.minScore}</span>` : ''}
+    <div class="summary__page">
+      <div class="summary__page-body summary__page-body--list">
+        <div class="summary__completed-title">本周已讨伐</div>
+        <div class="summary__completed-scroll">
+          ${listItems}
+        </div>
+      </div>
+      <button class="modal__btn modal__btn--cancel js-summary-close">关闭</button>
     </div>
   `;
+
+  // Bind all close buttons
+  document.querySelectorAll('.js-summary-close').forEach(btn =>
+    btn.addEventListener('click', closeSummary)
+  );
 
   loadMakimaImage(avgRounded);
 }
