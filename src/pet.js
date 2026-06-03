@@ -246,6 +246,13 @@
             }
             this.state = 'patrol';
             this.battleTargetEl = null;
+            // Restore original element opacity
+            if (this._battleOriginalEl) {
+              this._battleOriginalEl.style.opacity = '';
+              this._battleOriginalEl = null;
+            }
+            // Callback: refresh list etc.
+            if (this.battleOnDone) { this.battleOnDone(); this.battleOnDone = null; }
           }
         }
       }
@@ -266,7 +273,7 @@
     }
 
     /* ── battle: rise from patrol to target, shatter, fall back ── */
-    battle(targetEl, savedRect) {
+    battle(targetEl, savedRect, onDone) {
       if (!targetEl || this.state === 'battle') return;
 
       if (this.jumpTimer) { clearTimeout(this.jumpTimer); this.jumpTimer = null; }
@@ -289,9 +296,13 @@
       this.battleOverlay = document.createElement('div');
       this.battleOverlay.className = 'todo-item battle-overlay';
       this.battleOverlay.setAttribute('data-type', targetEl.getAttribute('data-type') || 'normal');
+      const type = targetEl.getAttribute('data-type') || 'normal';
       this.battleOverlay.innerHTML = `
+        <div class="todo-item__pull-assembly" style="flex-shrink:0;width:40px;height:36px;display:flex;align-items:flex-start;justify-content:center;">
+          <svg viewBox="0 0 28 28" width="26" height="26"><polygon points="14,3 3,23 25,23" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linejoin="round"/><circle cx="14" cy="23" r="2.2" fill="#1a1a1a"/></svg>
+        </div>
         <span class="todo-item__text">${text}</span>
-        <span class="${badgeClass}">${badgeText}</span>
+        <span class="todo-item__badge todo-item__badge--${type}">${badgeText}</span>
       `;
       this.battleOverlay.style.cssText = `
         position: fixed; left: ${targetRect.left}px; top: ${targetRect.top}px;
@@ -310,9 +321,15 @@
 
       document.body.appendChild(this.battleOverlay);
       this.battleTargetEl = this.battleOverlay;
+      // Hide original element so it doesn't show after overlay is removed
+      if (targetEl && document.contains(targetEl)) {
+        targetEl.style.opacity = '0';
+        this._battleOriginalEl = targetEl;
+      }
       this.battleTargetX = targetRect.left + targetRect.width / 2 - BATTLE_W / 2;
       this.battleTargetY = targetRect.top + targetRect.height / 2 - BATTLE_H / 2;
       this.battlePhase = 'rise';   // rise → strike → fall
+      this.battleOnDone = onDone || null;
       this.battleRiseStart = performance.now();
 
       this.state = 'battle';
@@ -446,8 +463,8 @@
       for (let i = 0; i < 14; i++) {
         const shard = document.createElement('div');
         shard.className = 'pet-shard';
-        const w = (14 + Math.random() * 28) * 3;
-        const h = (8 + Math.random() * 18) * 3;
+        const w = (20 + Math.random() * 50) * 3;
+        const h = (6 + Math.random() * 12) * 3;
         const angle = (Math.PI * 2 * i) / 10 + (Math.random() - 0.5) * 0.5;
         const dist = 50 + Math.random() * 80;
         shard.style.cssText = `

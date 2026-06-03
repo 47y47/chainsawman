@@ -236,7 +236,7 @@ function setupIPC() {
 
   ipcMain.handle('get-completed-todos', (_, { year, weekNumber }) => {
     const rows = queryAll(
-      `SELECT title, score, completed_at FROM todos
+      `SELECT id, title, score, completed_at FROM todos
        WHERE week_year = ? AND week_number = ?
        AND status = 'completed' AND score IS NOT NULL
        ORDER BY completed_at DESC`,

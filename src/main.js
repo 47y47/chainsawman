@@ -424,11 +424,12 @@ document.getElementById('btn-scoring-confirm').addEventListener('click', async (
   }
 
   closeScoring();
-  await loadTodos();
 
-  // Trigger Pochita battle — use saved element (may be detached) and rect
+  // Trigger Pochita battle — load list AFTER battle finishes to avoid overlap
   if (targetEl && targetRect && window.__pochitaPet) {
-    window.__pochitaPet.battle(targetEl, targetRect);
+    window.__pochitaPet.battle(targetEl, targetRect, () => loadTodos());
+  } else {
+    await loadTodos();
   }
 });
 
@@ -532,8 +533,8 @@ function renderSummary(summary, completedTodos) {
   let listItems = '';
   if (completedTodos && completedTodos.length > 0) {
     listItems = completedTodos.map(t => `
-      <div class="summary__completed-item">
-        <span class="summary__completed-score">${t.score}</span>
+      <div class="summary__completed-item" data-completed-id="${t.id}">
+        <span class="summary__completed-score js-score-cell">${t.score}</span>
         <span class="summary__completed-text">${escapeHtml(t.title)}</span>
         <span class="summary__completed-time">${(t.completed_at || '').slice(5, 16).replace('T', ' ')}</span>
       </div>
@@ -561,8 +562,11 @@ function renderSummary(summary, completedTodos) {
     </div>
     <div class="summary__page">
       <div class="summary__page-body summary__page-body--list">
-        <div class="summary__completed-title">本周已讨伐</div>
-        <div class="summary__completed-scroll">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <div class="summary__completed-title" style="margin-bottom:0;">本周已讨伐</div>
+          <button class="summary__manage-btn" id="btn-manage-completed">管理</button>
+        </div>
+        <div class="summary__completed-scroll" id="completed-list">
           ${listItems}
         </div>
       </div>
@@ -574,6 +578,45 @@ function renderSummary(summary, completedTodos) {
   document.querySelectorAll('.js-summary-close').forEach(btn =>
     btn.addEventListener('click', closeSummary)
   );
+
+  // Manage toggle — turns score cells into delete buttons
+  let manageMode = false;
+  const manageBtn = document.getElementById('btn-manage-completed');
+  if (manageBtn) {
+    manageBtn.addEventListener('click', () => {
+      manageMode = !manageMode;
+      manageBtn.textContent = manageMode ? '完成' : '管理';
+      manageBtn.classList.toggle('summary__manage-btn--active', manageMode);
+      document.querySelectorAll('.js-score-cell').forEach(cell => {
+        if (manageMode) {
+          cell.setAttribute('data-prev-text', cell.textContent);
+          cell.textContent = '×';
+          cell.classList.add('summary__score--delete');
+        } else {
+          cell.textContent = cell.getAttribute('data-prev-text') || '';
+          cell.classList.remove('summary__score--delete');
+        }
+      });
+    });
+  }
+
+  // Delete on score cell click in manage mode
+  const completedList = document.getElementById('completed-list');
+  if (completedList) {
+    completedList.addEventListener('click', async (e) => {
+      if (!manageMode) return;
+      const cell = e.target.closest('.js-score-cell');
+      if (!cell) return;
+      const item = cell.closest('[data-completed-id]');
+      if (!item) return;
+      const id = parseInt(item.getAttribute('data-completed-id'));
+      await api().deleteTodo({ id });
+      item.style.transition = 'all 0.2s';
+      item.style.transform = 'scale(0)';
+      item.style.opacity = '0';
+      setTimeout(() => item.remove(), 200);
+    });
+  }
 
   loadMakimaImage(avgRounded);
 }
