@@ -27,7 +27,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Navigation
   document.getElementById('btn-prev-week').addEventListener('click', prevWeek);
   document.getElementById('btn-next-week').addEventListener('click', nextWeek);
-  document.getElementById('btn-today').addEventListener('click', goToday);
+  document.getElementById('btn-today').addEventListener('click', toggleCompleted);
+  document.getElementById('week-label').addEventListener('click', goToday);
   document.getElementById('btn-add').addEventListener('click', openAddModal);
   document.getElementById('btn-summary').addEventListener('click', openSummary);
   document.getElementById('btn-modal-cancel').addEventListener('click', closeModal);
@@ -93,8 +94,26 @@ function goToday() {
   const iso = getISOWeek(new Date());
   currentYear = iso.year;
   currentWeek = iso.week;
+  showCompleted = false; // reset to incomplete on jump to today
   updateWeekLabel();
+  updateToggleButton();
   loadTodos();
+}
+
+// ─── Toggle completed/incomplete view ────────────
+let showCompleted = false;
+
+function toggleCompleted() {
+  showCompleted = !showCompleted;
+  updateToggleButton();
+  loadTodos();
+}
+
+function updateToggleButton() {
+  const btn = document.getElementById('btn-today');
+  if (btn) {
+    btn.classList.toggle('header__today-btn--active', showCompleted);
+  }
 }
 
 // ─── Load & Render ─────────────────────────────
@@ -109,37 +128,42 @@ async function loadTodos() {
 }
 
 function renderTodos() {
-  const activeTodos = todos.filter(t => t.status !== 'completed');
+  const activeTodos = todos.filter(t => showCompleted ? t.status === 'completed' : t.status !== 'completed');
   const list = document.getElementById('todo-list');
   if (activeTodos.length === 0) {
     list.innerHTML = `<div style="text-align:center; color:var(--text-secondary); padding:40px 0;">
-      暂无契约<br><small>订立新的契约吧</small>
+      ${showCompleted ? '本周暂无讨伐记录' : '暂无契约<br><small>订立新的契约吧</small>'}
     </div>`;
     return;
   }
 
-  list.innerHTML = activeTodos.map(todo => `
-    <div class="todo-item"
+  list.innerHTML = activeTodos.map(todo => {
+    const isDone = todo.status === 'completed';
+    return `
+    <div class="todo-item ${isDone ? 'todo-item--completed' : ''}"
          data-id="${todo.id}"
          data-type="${todo.todo_type}">
-      <div class="todo-item__pull-assembly js-handle"
-           data-id="${todo.id}"
-           title="下拉讨伐">
-        <div class="todo-item__handle">
-          <svg viewBox="0 0 28 28" width="26" height="26" class="todo-item__handle-svg">
-            <polygon points="14,3 3,23 25,23" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linejoin="round"/>
-            <polygon points="14,7 7,21 21,21" fill="none" stroke="#444" stroke-width="1.2" stroke-linejoin="round" opacity="0.5"/>
-            <circle cx="14" cy="23" r="2.2" fill="#1a1a1a"/>
-          </svg>
+      ${isDone ? `
+        <span class="todo-item__score" style="font-size:16px;min-width:40px;text-align:center;">${todo.score ?? '—'}</span>
+      ` : `
+        <div class="todo-item__pull-assembly js-handle"
+             data-id="${todo.id}" title="下拉讨伐">
+          <div class="todo-item__handle">
+            <svg viewBox="0 0 28 28" width="26" height="26" class="todo-item__handle-svg">
+              <polygon points="14,3 3,23 25,23" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linejoin="round"/>
+              <polygon points="14,7 7,21 21,21" fill="none" stroke="#444" stroke-width="1.2" stroke-linejoin="round" opacity="0.5"/>
+              <circle cx="14" cy="23" r="2.2" fill="#1a1a1a"/>
+            </svg>
+          </div>
         </div>
-      </div>
+      `}
       <span class="todo-item__text">${escapeHtml(todo.title)}</span>
       <span class="todo-item__badge todo-item__badge--${todo.todo_type}">
         ${typeLabel(todo.todo_type)}
       </span>
       ${todo.remind_at ? `<span class="todo-item__remind">${todo.remind_at}</span>` : ''}
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 
   document.querySelectorAll('.js-handle').forEach(assembly => {
     attachPullCord(assembly);
@@ -544,6 +568,16 @@ function openEditModal(todo) {
   document.getElementById('modal-input').focus();
 }
 
+function openMigrateModal(todo) {
+  editingId = null; // create new, not edit existing
+  document.getElementById('modal-title').textContent = '迁移到本周';
+  document.getElementById('modal-input').value = todo.title;
+  document.getElementById('modal-type').value = todo.todo_type;
+  document.getElementById('modal-remind').value = todo.remind_at || '';
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.getElementById('modal-input').focus();
+}
+
 function closeModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
   editingId = null;
@@ -574,11 +608,27 @@ function showContextMenu(x, y, id) {
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
   menu.classList.remove('hidden');
+
+  // Show "migrate" only for past weeks (not this week)
+  const todo = todos.find(t => t.id === id);
+  const now = new Date();
+  const thisWeek = getISOWeek(now);
+  const isPastWeek = todo && (todo.week_year < thisWeek.year ||
+    (todo.week_year === thisWeek.year && todo.week_number < thisWeek.week));
+  document.getElementById('btn-migrate').classList.toggle('hidden', !isPastWeek);
 }
 
 function hideContextMenu() {
   document.getElementById('context-menu').classList.add('hidden');
 }
+
+// Click-away-to-close
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('context-menu');
+  if (!menu.classList.contains('hidden') && !menu.contains(e.target)) {
+    hideContextMenu();
+  }
+});
 
 document.getElementById('context-menu').addEventListener('click', async (e) => {
   const action = e.target.dataset.action;
@@ -590,6 +640,8 @@ document.getElementById('context-menu').addEventListener('click', async (e) => {
 
   if (action === 'edit') {
     openEditModal(todo);
+  } else if (action === 'migrate') {
+    openMigrateModal(todo);
   } else if (action === 'delete') {
     try { await api().deleteTodo({ id: contextTodoId }); } catch (e) {}
     loadTodos();
@@ -600,106 +652,33 @@ document.getElementById('context-menu').addEventListener('click', async (e) => {
 async function openSummary() {
   document.getElementById('summary-overlay').classList.remove('hidden');
   try {
-    const [summary, completed] = await Promise.all([
-      api().getSummary({ year: currentYear, weekNumber: currentWeek }),
-      api().getCompletedTodos({ year: currentYear, weekNumber: currentWeek })
-    ]);
-    renderSummary(summary, completed.todos);
+    const summary = await api().getSummary({ year: currentYear, weekNumber: currentWeek });
+    renderSummary(summary);
   } catch (e) { console.error('Failed to get summary:', e); }
 }
 
-function renderSummary(summary, completedTodos) {
+function renderSummary(summary) {
   const avgRounded = Math.round(summary.avgScore);
   const dialogue = getMakimaDialogue(avgRounded, summary);
 
-  // Build completed list HTML (page 2)
-  let listItems = '';
-  if (completedTodos && completedTodos.length > 0) {
-    listItems = completedTodos.map(t => `
-      <div class="summary__completed-item" data-completed-id="${t.id}">
-        <span class="summary__completed-score js-score-cell">${t.score}</span>
-        <span class="summary__completed-text">${escapeHtml(t.title)}</span>
-        <span class="summary__completed-time">${(t.completed_at || '').slice(5, 16).replace('T', ' ')}</span>
-      </div>
-    `).join('');
-  } else {
-    listItems = '<div class="summary__empty">本周暂无讨伐记录</div>';
-  }
-
   document.getElementById('summary-content').innerHTML = `
-    <div class="summary__page">
-      <div class="summary__page-body">
-        <div class="summary__score">${summary.avgScore.toFixed(1)}</div>
-        <div style="color:var(--text-secondary); font-size:13px;">本周平均评分</div>
-        <div class="summary__makima" id="makima-img">
-          <span>Q版玛奇玛<br>(${avgRounded}分)</span>
-        </div>
-        <div class="summary__dialogue">"${escapeHtml(dialogue)}"</div>
-        <div class="summary__stats">
-          <span>讨伐 ${summary.completedCount}/${summary.totalCount}</span>
-          ${summary.maxScore != null ? `<span>最高评分 ${summary.maxScore}</span>` : ''}
-          ${summary.minScore != null ? `<span>最低评分 ${summary.minScore}</span>` : ''}
-        </div>
-      </div>
-      <button class="modal__btn modal__btn--cancel js-summary-close">关闭</button>
+    <div class="summary__score">${summary.avgScore.toFixed(1)}</div>
+    <div class="summary__score-label">本周平均评分</div>
+    <div class="summary__makima" id="makima-img">
+      <span>Q版玛奇玛<br>(${avgRounded}分)</span>
     </div>
-    <div class="summary__page">
-      <div class="summary__page-body summary__page-body--list">
-        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
-          <div class="summary__completed-title" style="margin-bottom:0;">本周已讨伐</div>
-          <button class="summary__manage-btn" id="btn-manage-completed">管理</button>
-        </div>
-        <div class="summary__completed-scroll" id="completed-list">
-          ${listItems}
-        </div>
-      </div>
-      <button class="modal__btn modal__btn--cancel js-summary-close">关闭</button>
+    <div class="summary__dialogue">"${escapeHtml(dialogue)}"</div>
+    <div class="summary__stats">
+      <span>讨伐 ${summary.completedCount}/${summary.totalCount}</span>
+      ${summary.maxScore != null ? `<span>最高 ${summary.maxScore}</span>` : ''}
+      ${summary.minScore != null ? `<span>最低 ${summary.minScore}</span>` : ''}
     </div>
+    <button class="modal__btn modal__btn--cancel js-summary-close" style="margin-top:14px;">关闭</button>
   `;
 
-  // Bind all close buttons
   document.querySelectorAll('.js-summary-close').forEach(btn =>
     btn.addEventListener('click', closeSummary)
   );
-
-  // Manage toggle — turns score cells into delete buttons
-  let manageMode = false;
-  const manageBtn = document.getElementById('btn-manage-completed');
-  if (manageBtn) {
-    manageBtn.addEventListener('click', () => {
-      manageMode = !manageMode;
-      manageBtn.textContent = manageMode ? '完成' : '管理';
-      manageBtn.classList.toggle('summary__manage-btn--active', manageMode);
-      document.querySelectorAll('.js-score-cell').forEach(cell => {
-        if (manageMode) {
-          cell.setAttribute('data-prev-text', cell.textContent);
-          cell.textContent = '×';
-          cell.classList.add('summary__score--delete');
-        } else {
-          cell.textContent = cell.getAttribute('data-prev-text') || '';
-          cell.classList.remove('summary__score--delete');
-        }
-      });
-    });
-  }
-
-  // Delete on score cell click in manage mode
-  const completedList = document.getElementById('completed-list');
-  if (completedList) {
-    completedList.addEventListener('click', async (e) => {
-      if (!manageMode) return;
-      const cell = e.target.closest('.js-score-cell');
-      if (!cell) return;
-      const item = cell.closest('[data-completed-id]');
-      if (!item) return;
-      const id = parseInt(item.getAttribute('data-completed-id'));
-      await api().deleteTodo({ id });
-      item.style.transition = 'all 0.2s';
-      item.style.transform = 'scale(0)';
-      item.style.opacity = '0';
-      setTimeout(() => item.remove(), 200);
-    });
-  }
 
   loadMakimaImage(avgRounded);
 }
