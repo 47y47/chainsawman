@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('chainsawAPI', {
   updateTodo: (data) => ipcRenderer.invoke('update-todo', data),
   deleteTodo: (data) => ipcRenderer.invoke('delete-todo', data),
   completeTodo: (data) => ipcRenderer.invoke('complete-todo', data),
+  reorderTodos: (data) => ipcRenderer.invoke('reorder-todos', data),
 
   // Summary
   getSummary: (data) => ipcRenderer.invoke('get-summary', data),

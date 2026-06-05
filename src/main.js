@@ -16,6 +16,16 @@ document.addEventListener('DOMContentLoaded', () => {
   updateWeekLabel();
   loadTodos();
 
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+      e.preventDefault(); openAddModal();
+    }
+    if (e.key === 'Escape') {
+      closeModal(); closeScoring(); closeSummary(); hideContextMenu();
+    }
+  });
+
   // Window controls
   document.getElementById('btn-minimize').addEventListener('click', () => {
     try { api().minimizeWindow(); } catch (e) {}
@@ -142,7 +152,7 @@ function renderTodos() {
     return `
     <div class="todo-item ${isDone ? 'todo-item--completed' : ''}"
          data-id="${todo.id}"
-         data-type="${todo.todo_type}">
+         data-type="${todo.todo_type}" ${isDone ? '' : 'draggable="true"'}>
       ${isDone ? `
         <span class="todo-item__score" style="font-size:16px;min-width:40px;text-align:center;">${todo.score ?? '—'}</span>
       ` : `
@@ -169,6 +179,36 @@ function renderTodos() {
     attachPullCord(assembly);
   });
 
+  // Drag-and-drop reorder
+  let dragSrcId = null;
+  document.querySelectorAll('.todo-item[draggable="true"]').forEach(item => {
+    item.addEventListener('dragstart', (e) => {
+      dragSrcId = parseInt(item.dataset.id);
+      item.style.opacity = '0.4';
+    });
+    item.addEventListener('dragend', (e) => {
+      item.style.opacity = '1';
+      dragSrcId = null;
+    });
+    item.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    });
+    item.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      if (!dragSrcId || dragSrcId === parseInt(item.dataset.id)) return;
+      // Get current order of visible items
+      const items = [...document.querySelectorAll('.todo-item[data-id]')];
+      const ids = items.map(el => parseInt(el.dataset.id));
+      const srcIdx = ids.indexOf(dragSrcId);
+      const dstIdx = ids.indexOf(parseInt(item.dataset.id));
+      ids.splice(srcIdx, 1);
+      ids.splice(dstIdx, 0, dragSrcId);
+      await api().reorderTodos({ ids });
+      loadTodos();
+    });
+  });
+
   document.querySelectorAll('.todo-item').forEach(item => {
     item.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -185,19 +225,6 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
-}
-
-function renderScratch() {
-  return `<span class="scratch-mark">
-    <svg viewBox="0 0 100 14" preserveAspectRatio="none">
-      <!-- Chainsaw teeth cut: jagged zigzag slash -->
-      <path d="M0,6 L8,3 L15,7 L22,4 L30,8 L38,5 L46,9 L54,4 L62,8 L70,3 L78,7 L85,4 L92,8 L100,5"
-        stroke="#999" stroke-width="3.5" fill="none" stroke-linejoin="round" stroke-linecap="round" opacity="0.8"/>
-      <!-- Inner highlight for torn-edge depth -->
-      <path d="M0,5.5 L8,2.5 L15,6.5 L22,3.5 L30,7.5 L38,4.5 L46,8.5 L54,3.5 L62,7.5 L70,2.5 L78,6.5 L85,3.5 L92,7.5 L100,4.5"
-        stroke="#bbb" stroke-width="1.2" fill="none" stroke-linejoin="round" stroke-linecap="round" opacity="0.5"/>
-    </svg>
-  </span>`;
 }
 
 // ─── Pull Cord Interaction ─────────────────────
@@ -765,25 +792,13 @@ document.getElementById('settings-overlay').addEventListener('click', (e) => {
   }
 });
 
+// Recurring check (notifications handled by main process)
+async function checkRecurring() {
+  try { const r = await api().checkRecurring(); if (r?.length) { todos = r; renderTodos(); } } catch (e) {}
+}
+setInterval(checkRecurring, 60000);
+
 // Wire settings button
 document.getElementById('btn-settings').addEventListener('click', openSettings);
 
-// ─── Recurring Check ───────────────────────────
-async function checkRecurring() {
-  try {
-    const refreshed = await api().checkRecurring();
-    if (refreshed && refreshed.length > 0) { todos = refreshed; renderTodos(); }
-  } catch (e) { console.error('Recurring check failed:', e); }
-}
 
-// ─── Reminder Check (poll every 30 seconds) ────
-setInterval(async () => {
-  try {
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const active = todos.filter(t => t.status === 'active' && t.remind_at === timeStr);
-    for (const todo of active) {
-      try { await api().showNotification({ title: '电锯人待办提醒', body: todo.title }); } catch (e) {}
-    }
-  } catch (e) {}
-}, 30000);

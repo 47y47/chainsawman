@@ -37,8 +37,11 @@ async function initDB() {
     completed_at TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     week_year   INTEGER NOT NULL,
-    week_number INTEGER NOT NULL
+    week_number INTEGER NOT NULL,
+    sort_order  INTEGER NOT NULL DEFAULT 0
   )`);
+  // Migration: add sort_order if upgrading from older schema
+  try { db.run('ALTER TABLE todos ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0'); } catch (e) {}
 
   db.run(`CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
@@ -161,19 +164,24 @@ function getCurrentWeek() {
 function setupIPC() {
   ipcMain.handle('add-todo', (_, { title, todoType, remindAt }) => {
     const { year, week } = getCurrentWeek();
+    const max = queryOne('SELECT COALESCE(MAX(sort_order), -1) + 1 as n FROM todos WHERE week_year = ? AND week_number = ?', [year, week]);
     db.run(
-      'INSERT INTO todos (title, todo_type, remind_at, week_year, week_number) VALUES (?, ?, ?, ?, ?)',
-      [title, todoType, remindAt || null, year, week]
+      'INSERT INTO todos (title, todo_type, remind_at, week_year, week_number, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+      [title, todoType, remindAt || null, year, week, max ? max.n : 0]
     );
     saveDB();
-    const result = db.exec('SELECT last_insert_rowid()');
-    const newId = result[0].values[0][0];
-    return queryOne('SELECT * FROM todos WHERE id = ?', [newId]);
+    return queryOne('SELECT * FROM todos WHERE id = last_insert_rowid()');
+  });
+
+  ipcMain.handle('reorder-todos', (_, { ids }) => {
+    ids.forEach((id, i) => db.run('UPDATE todos SET sort_order = ? WHERE id = ?', [i, id]));
+    saveDB();
+    return { success: true };
   });
 
   ipcMain.handle('get-todos', (_, { year, weekNumber }) => {
     return queryAll(
-      'SELECT * FROM todos WHERE week_year = ? AND week_number = ? ORDER BY created_at DESC',
+      'SELECT * FROM todos WHERE week_year = ? AND week_number = ? ORDER BY sort_order ASC, created_at DESC',
       [year, weekNumber]
     );
   });
@@ -261,7 +269,7 @@ function setupIPC() {
 
     saveDB();
     return queryAll(
-      'SELECT * FROM todos WHERE week_year = ? AND week_number = ? ORDER BY created_at DESC',
+      'SELECT * FROM todos WHERE week_year = ? AND week_number = ? ORDER BY sort_order ASC, created_at DESC',
       [year, week]
     );
   });
