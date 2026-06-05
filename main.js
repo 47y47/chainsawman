@@ -292,7 +292,8 @@ function setupIPC() {
 
   ipcMain.handle('set-auto-launch', async (_, enabled) => {
     const appName = '电锯人待办';
-    const appPath = process.execPath;
+    // Include project path as argument so Electron knows what to load
+    const appPath = `"${process.execPath}" "${__dirname}"`;
     const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 
     // Always persist to DB first (guaranteed source of truth)
@@ -356,7 +357,7 @@ async function syncAutoLaunch() {
     const currentlyEnabled = await getRegAutoStart();
 
     if (shouldEnable && !currentlyEnabled) {
-      const appPath = process.execPath;
+      const appPath = `"${process.execPath}" "${__dirname}"`;
       const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
       const cmd = `reg add "${regKey}" /v "电锯人待办" /t REG_SZ /d "\\"${appPath}\\"" /f`;
       exec(cmd, (err) => {

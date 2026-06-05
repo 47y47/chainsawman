@@ -8,7 +8,7 @@ let editingId = null;
 
 // ─── Init ───────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  preloadAllAudio();
+  initAudio(); // async, fires in background
   const now = new Date();
   const iso = getISOWeek(now);
   currentYear = iso.year;
@@ -334,105 +334,101 @@ function attachPullCord(assembly) {
   });
 }
 
-// ─── Audio ──────────────────────────────────────
-let chainsawAudio = null;
+// ─── Audio system (Web Audio API, zero latency) ──
+let audioCtx = null;
+let audioBuffers = {};     // decoded AudioBuffers
+let idleSource = null;     // current idle loop source
+let bgmSource = null;      // current BGM source
+let audioPaused = false;
 
-// ─── Audio system ────────────────────────────────
-let startupAudio = null;
-let idleAudioA = null, idleAudioB = null, idleActive = false; // dual for gapless loop
-let bgmAudio = null;
-let strikeAudio = null;
-let allAudioPaused = false;
-
-function createAudio(src) {
-  const a = new Audio('../assets/audio/' + src);
-  a.preload = 'auto';
-  return a;
-}
-
-// Preload all audio immediately (not lazy)
-function preloadAllAudio() {
-  startupAudio = createAudio('startup.mp3');
-  idleAudioA = createAudio('idle.mp3');
-  idleAudioB = createAudio('idle.mp3');
-  idleAudioA.onended = () => { if (idleActive && !allAudioPaused) idleAudioB.play().catch(() => {}); };
-  idleAudioB.onended = () => { if (idleActive && !allAudioPaused) idleAudioA.play().catch(() => {}); };
-  bgmAudio = createAudio('bgm.mp3'); bgmAudio.loop = true;
-  strikeAudio = createAudio('strike.mp3');
-  // Force load
-  [startupAudio, idleAudioA, idleAudioB, bgmAudio, strikeAudio].forEach(a => a.load());
+async function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const files = ['startup', 'idle', 'bgm', 'strike'];
+  for (const name of files) {
+    const resp = await fetch('../assets/audio/' + name + '.mp3');
+    const arrayBuf = await resp.arrayBuffer();
+    audioBuffers[name] = await audioCtx.decodeAudioData(arrayBuf);
+  }
 }
 
 function ensureAudio() {
-  if (!startupAudio) preloadAllAudio();
+  if (!audioCtx) initAudio();
+}
+
+function playBuffer(name, loop = false, offset = 0) {
+  if (!audioCtx || !audioBuffers[name]) return null;
+  const source = audioCtx.createBufferSource();
+  source.buffer = audioBuffers[name];
+  source.loop = loop;
+  source.connect(audioCtx.destination);
+  source.start(0, offset);
+  return source;
+}
+
+function stopSource(src) {
+  if (src) { try { src.stop(); } catch (e) {} }
 }
 
 function playStartup() {
   if (isMuted) return;
-  allAudioPaused = false;
   ensureAudio();
-  try {
-    stopAllAudio();
-    startupAudio.currentTime = 0;
-    startupAudio.play().catch(() => {});
-    startupAudio.onended = () => {
-      if (isMuted || allAudioPaused) return;
-      idleActive = true;
-      idleAudioA.currentTime = 0;
-      idleAudioA.play().catch(() => {});
-    };
-  } catch (e) {}
+  stopAllAudio();
+  audioPaused = false;
+  playBuffer('startup', false);
+  // When startup ends (3s), start idle loop
+  const buf = audioBuffers['startup'];
+  if (buf && audioCtx) {
+    setTimeout(() => {
+      if (!audioPaused && !isMuted) {
+        idleSource = playBuffer('idle', true);
+      }
+    }, buf.duration * 1000 + 50);
+  }
 }
 
 function stopIdle() {
-  idleActive = false;
-  try {
-    if (startupAudio) { startupAudio.pause(); startupAudio.currentTime = 0; }
-    if (idleAudioA) { idleAudioA.pause(); idleAudioA.currentTime = 0; }
-    if (idleAudioB) { idleAudioB.pause(); idleAudioB.currentTime = 0; }
-  } catch (e) {}
+  stopSource(idleSource); idleSource = null;
 }
 
 function playBgm() {
   if (isMuted) return;
-  allAudioPaused = false;
   ensureAudio();
-  try {
-    stopIdle();
-    bgmAudio.currentTime = 0;
-    bgmAudio.play().catch(() => {});
-  } catch (e) {}
+  stopIdle();
+  audioPaused = false;
+  bgmSource = playBuffer('bgm', true);
 }
 
 function stopBgm() {
-  try {
-    if (bgmAudio) { bgmAudio.pause(); bgmAudio.currentTime = 0; }
-  } catch (e) {}
+  stopSource(bgmSource); bgmSource = null;
 }
 
 window.playStrikeSound = function () {
-  if (isMuted) return;
-  ensureAudio();
-  try {
-    const s = strikeAudio.cloneNode();
-    s.volume = 0.8;
-    s.currentTime = 0;
-    s.play().catch(() => {});
-  } catch (e) {}
+  if (isMuted || !audioCtx || !audioBuffers['strike']) return;
+  const source = audioCtx.createBufferSource();
+  source.buffer = audioBuffers['strike'];
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.8;
+  source.connect(gain);
+  gain.connect(audioCtx.destination);
+  source.start(0);
 };
 
 function stopAllAudio() {
-  allAudioPaused = true;
-  [startupAudio, idleAudioA, idleAudioB, bgmAudio, strikeAudio].forEach(a => {
-    if (a) { try { a.pause(); a.currentTime = 0; } catch (e) {} }
-  });
+  audioPaused = true;
+  stopSource(idleSource); idleSource = null;
+  stopSource(bgmSource); bgmSource = null;
 }
 
-// Exposed for pet module to stop BGM when battle ends
 window.stopBattleBgm = function () {
   stopBgm();
   stopIdle();
 };
+
+// Legacy compat — now handled by the above
+function playEngineSound() {
+  playBgm();
+}
 
 // ─── Complete & Score ──────────────────────────
 let pendingCompleteId = null;
