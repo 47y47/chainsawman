@@ -168,7 +168,7 @@
           this.baseY = this.battlePrevY + (this.battleTargetY - this.battlePrevY) * ease;
           if (t >= 1) {
             this.battlePhase = 'strike';
-            this.battleStrikeTime = now;
+            this.battleStrikeTime = now + 300; // 300ms hold before first strike
             this.battleCrackLevel = 0;
             this.battleFinalDone = false;
             // Switch to battle sprite sheet
@@ -183,42 +183,43 @@
           // Multi-strike: attack(0.35s) → pause(0.15s) → attack → pause → attack → final(0.4s)
           // Animation plays continuously, cracks progress on each attack
           const strikeElapsed = now - this.battleStrikeTime;
-          const ATK = 350, PAUSE = 400;
+          const ATK = 350, PAUSE = 500;
           const fullCycle = ATK + PAUSE;
-          const totalStrikes = 4; // 4 cracks + 1 break = 5 impacts
+          const totalStrikes = 5; // 4 cracks + 1 break
 
           const cycleIdx = Math.floor(strikeElapsed / fullCycle);
           const inCycle = strikeElapsed % fullCycle;
           const attackStart = inCycle < ATK;
 
-          if (cycleIdx < totalStrikes) {
-            const crackLevel = cycleIdx + 1;
-            if (attackStart && this.battleCrackLevel !== crackLevel) {
-              this.battleCrackLevel = crackLevel;
-              this.spriteEl.classList.add('pet--shake');
-              this._drawCracks(crackLevel);
-              this._spawnSparks(this.battleTargetRect);
-              setTimeout(() => this.spriteEl.classList.remove('pet--shake'), 300);
-            }
-          } else if (!this.battleFinalDone) {
-            // 5th impact: final break → go to fall after hold
-            this.battleFinalDone = true;
+          if (cycleIdx < totalStrikes && attackStart && this.battleCrackLevel !== cycleIdx + 1) {
+            const strikeNum = cycleIdx + 1;
+            this.battleCrackLevel = strikeNum;
             this.spriteEl.classList.add('pet--shake');
-            this._drawCracks('break');
-            this._spawnShards(this.battleOverlay.getBoundingClientRect());
-            this._spawnSparks(this.battleTargetRect);
-            this._spawnParticles(this.battleTargetRect);
-            setTimeout(() => {
-              if (this.state === 'battle' && this.battlePhase === 'strike') {
-                this.battlePhase = 'fall';
-                this.battleFallStart = performance.now();
-                this.battleAnimPlaying = false;
-                this.spriteEl.classList.remove('pet--shake');
-                this.spriteEl.style.backgroundImage = `url('${BATTLE_IMG}')`;
-                this.spriteEl.style.backgroundSize = 'contain';
-                this.spriteEl.style.backgroundPosition = 'center';
-              }
-            }, 600);
+            if (window.playStrikeSound) window.playStrikeSound();
+            setTimeout(() => this.spriteEl.classList.remove('pet--shake'), 300);
+
+            if (strikeNum < totalStrikes) {
+              this._drawCracks(strikeNum);
+              this._spawnSparks(this.battleTargetRect);
+            } else {
+              this.battleFinalDone = true;
+              this._drawCracks('break');
+              this._spawnShards(this.battleOverlay.getBoundingClientRect());
+              this._spawnSparks(this.battleTargetRect);
+              this._spawnParticles(this.battleTargetRect);
+              if (window.playStrikeSound) window.playStrikeSound();
+              setTimeout(() => {
+                if (this.state === 'battle' && this.battlePhase === 'strike') {
+                  this.battlePhase = 'fall';
+                  this.battleFallStart = performance.now();
+                  this.battleAnimPlaying = false;
+                  this.spriteEl.classList.remove('pet--shake');
+                  this.spriteEl.style.backgroundImage = `url('${BATTLE_IMG}')`;
+                  this.spriteEl.style.backgroundSize = 'contain';
+                  this.spriteEl.style.backgroundPosition = 'center';
+                }
+              }, 600);
+            }
           }
         } else if (this.battlePhase === 'fall') {
           // Fall back over 1.5 seconds with ease-in, no animation

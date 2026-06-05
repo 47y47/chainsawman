@@ -8,6 +8,7 @@ let editingId = null;
 
 // ─── Init ───────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  preloadAllAudio();
   const now = new Date();
   const iso = getISOWeek(now);
   currentYear = iso.year;
@@ -268,6 +269,7 @@ function attachPullCord(assembly) {
     createCable();
     updateCable(0, 0);
     document.body.classList.add('shaking');
+    playStartup(); // 0-3s startup → then idle loop
     e.preventDefault();
   });
 
@@ -304,8 +306,10 @@ function attachPullCord(assembly) {
     const dist = Math.sqrt(dragX * dragX + dragY * dragY);
     if (dist >= THRESHOLD) {
       const id = parseInt(assembly.dataset.id);
-      playEngineSound();
+      playBgm();
       triggerComplete(id);
+    } else {
+      stopIdle(); // reset without completing → stop sound
     }
 
     handle.style.transition = 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)';
@@ -333,22 +337,102 @@ function attachPullCord(assembly) {
 // ─── Audio ──────────────────────────────────────
 let chainsawAudio = null;
 
-function playEngineSound() {
-  if (isMuted) return;
-  try {
-    if (!chainsawAudio) {
-      chainsawAudio = new Audio('../assets/combined_full.mp3');
-    }
-    chainsawAudio.currentTime = 0;
-    chainsawAudio.play().catch(e => console.warn('Audio play failed:', e));
-    setTimeout(() => {
-      if (chainsawAudio) {
-        chainsawAudio.pause();
-        chainsawAudio.currentTime = 0;
-      }
-    }, 10000);
-  } catch (e) { console.warn('Audio failed:', e); }
+// ─── Audio system ────────────────────────────────
+let startupAudio = null;
+let idleAudioA = null, idleAudioB = null, idleActive = false; // dual for gapless loop
+let bgmAudio = null;
+let strikeAudio = null;
+let allAudioPaused = false;
+
+function createAudio(src) {
+  const a = new Audio('../assets/audio/' + src);
+  a.preload = 'auto';
+  return a;
 }
+
+// Preload all audio immediately (not lazy)
+function preloadAllAudio() {
+  startupAudio = createAudio('startup.mp3');
+  idleAudioA = createAudio('idle.mp3');
+  idleAudioB = createAudio('idle.mp3');
+  idleAudioA.onended = () => { if (idleActive && !allAudioPaused) idleAudioB.play().catch(() => {}); };
+  idleAudioB.onended = () => { if (idleActive && !allAudioPaused) idleAudioA.play().catch(() => {}); };
+  bgmAudio = createAudio('bgm.mp3'); bgmAudio.loop = true;
+  strikeAudio = createAudio('strike.mp3');
+  // Force load
+  [startupAudio, idleAudioA, idleAudioB, bgmAudio, strikeAudio].forEach(a => a.load());
+}
+
+function ensureAudio() {
+  if (!startupAudio) preloadAllAudio();
+}
+
+function playStartup() {
+  if (isMuted) return;
+  allAudioPaused = false;
+  ensureAudio();
+  try {
+    stopAllAudio();
+    startupAudio.currentTime = 0;
+    startupAudio.play().catch(() => {});
+    startupAudio.onended = () => {
+      if (isMuted || allAudioPaused) return;
+      idleActive = true;
+      idleAudioA.currentTime = 0;
+      idleAudioA.play().catch(() => {});
+    };
+  } catch (e) {}
+}
+
+function stopIdle() {
+  idleActive = false;
+  try {
+    if (startupAudio) { startupAudio.pause(); startupAudio.currentTime = 0; }
+    if (idleAudioA) { idleAudioA.pause(); idleAudioA.currentTime = 0; }
+    if (idleAudioB) { idleAudioB.pause(); idleAudioB.currentTime = 0; }
+  } catch (e) {}
+}
+
+function playBgm() {
+  if (isMuted) return;
+  allAudioPaused = false;
+  ensureAudio();
+  try {
+    stopIdle();
+    bgmAudio.currentTime = 0;
+    bgmAudio.play().catch(() => {});
+  } catch (e) {}
+}
+
+function stopBgm() {
+  try {
+    if (bgmAudio) { bgmAudio.pause(); bgmAudio.currentTime = 0; }
+  } catch (e) {}
+}
+
+window.playStrikeSound = function () {
+  if (isMuted) return;
+  ensureAudio();
+  try {
+    const s = strikeAudio.cloneNode();
+    s.volume = 0.8;
+    s.currentTime = 0;
+    s.play().catch(() => {});
+  } catch (e) {}
+};
+
+function stopAllAudio() {
+  allAudioPaused = true;
+  [startupAudio, idleAudioA, idleAudioB, bgmAudio, strikeAudio].forEach(a => {
+    if (a) { try { a.pause(); a.currentTime = 0; } catch (e) {} }
+  });
+}
+
+// Exposed for pet module to stop BGM when battle ends
+window.stopBattleBgm = function () {
+  stopBgm();
+  stopIdle();
+};
 
 // ─── Complete & Score ──────────────────────────
 let pendingCompleteId = null;
@@ -427,7 +511,10 @@ document.getElementById('btn-scoring-confirm').addEventListener('click', async (
 
   // Trigger Pochita battle — load list AFTER battle finishes to avoid overlap
   if (targetEl && targetRect && window.__pochitaPet) {
-    window.__pochitaPet.battle(targetEl, targetRect, () => loadTodos());
+    window.__pochitaPet.battle(targetEl, targetRect, () => {
+      loadTodos();
+      if (window.stopBattleBgm) window.stopBattleBgm();
+    });
   } else {
     await loadTodos();
   }
